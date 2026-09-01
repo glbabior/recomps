@@ -10,14 +10,25 @@ things the interface needs:
     size, widen what counts as comparable, drop a sale you have decided is not
     a real comp -- and see the answer move, without re-fetching anything.
 
-The implementation deliberately does *not* deserialize the computed results.
-It restores the collected rows and then runs the ordinary analysis over them
-again. Restoring the computed figures would let a saved run and a fresh one
-disagree about what the same numbers mean; recomputing cannot.
+Two ways in, and the difference matters:
+
+`read_stored()` returns the figures the run itself reported, read straight back
+off disk with nothing recalculated. That is what viewing a past run should use.
+
+`reopen()` restores the collected rows and runs the ordinary analysis over them
+again, which is what you want when the *question* changes -- a different subject
+size, a comp dropped. It uses the profile as it was at the time of the run, so a
+profile edited since cannot retroactively change what a past run meant.
+
+Neither touches the network, and both read every row the run collected, so no
+comparable sale can go missing from a saved run. A listing vanishing from a
+website afterwards is irrelevant: the row was captured, and the archive also
+keeps that day's workbook as a plain file.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 
@@ -31,6 +42,81 @@ from lotcomps.research.fixture import active_from_rows, sold_from_rows
 
 class SnapshotUnreadable(ValueError):
     pass
+
+
+@dataclass
+class StoredRun:
+    """A past run's figures exactly as they were saved. Nothing is recomputed.
+
+    This is what "show me what I got last time" should use. `reopen()` below
+    re-derives the figures from the saved rows, which is what you want when the
+    question changes; this returns what the run actually reported, which is what
+    you want when it does not.
+
+    Both read the same file and neither touches the network, so a saved comp
+    cannot disappear either way. The distinction is only about which answer is
+    authoritative: the one the run gave, or the one today's code would give.
+    """
+
+    market: str
+    profile_name: str
+    run_at: str
+    window_start: str
+    window_end: str
+    researcher: str
+    sold: list[dict[str, Any]] = field(default_factory=list)
+    active: list[dict[str, Any]] = field(default_factory=list)
+    stats: dict[str, Any] = field(default_factory=dict)
+    valuation: dict[str, Any] = field(default_factory=dict)
+    guidance: dict[str, Any] = field(default_factory=dict)
+    areas: dict[str, Any] = field(default_factory=dict)
+    agents: dict[str, Any] = field(default_factory=dict)
+    excluded: list[dict[str, Any]] = field(default_factory=list)
+    caveats: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def primary_value(self) -> float | None:
+        for basis in (self.valuation or {}).get("bases", []):
+            if basis.get("is_primary"):
+                return basis.get("value")
+        return None
+
+    @property
+    def sold_count(self) -> int:
+        return int((self.stats.get("sold") or {}).get("count") or 0)
+
+    @property
+    def active_count(self) -> int:
+        return int((self.stats.get("active") or {}).get("count") or 0)
+
+
+def read_stored(snapshot: Snapshot) -> StoredRun:
+    """Read a saved run's own figures back, without recomputing anything."""
+    block = _run_block(snapshot)
+    payload = snapshot.payload
+    return StoredRun(
+        market=block.get("market", ""),
+        profile_name=(block.get("profile") or {}).get("name", ""),
+        run_at=block.get("run_at", ""),
+        window_start=block.get("window_start", ""),
+        window_end=block.get("window_end", ""),
+        researcher=block.get("researcher", ""),
+        sold=list(payload.get("sold") or []),
+        active=list(payload.get("active") or []),
+        stats=dict(payload.get("stats") or {}),
+        valuation=dict(payload.get("valuation") or {}),
+        guidance=dict(payload.get("guidance") or {}),
+        areas=dict(payload.get("areas") or {}),
+        agents=dict(payload.get("agents") or {}),
+        excluded=list(payload.get("excluded") or []),
+        caveats=list(payload.get("caveats") or []),
+        warnings=list(payload.get("warnings") or []),
+    )
+
+
+def read_stored_path(path: str) -> StoredRun:
+    return read_stored(Snapshot.load(path))
 
 
 def _run_block(snapshot: Snapshot) -> dict[str, Any]:

@@ -258,3 +258,67 @@ def test_a_snapshot_without_run_metadata_is_rejected():
     broken = Snapshot(schema_version=1, payload={"sold": [], "active": []})
     with pytest.raises(reopen_mod.SnapshotUnreadable):
         reopen_mod.reopen(broken, MARKET)
+
+
+# ---------------------------------------------------------------------------
+# Nothing can go missing from a saved run
+# ---------------------------------------------------------------------------
+
+
+def test_reopening_keeps_every_single_row(result):
+    """The worry this answers: can a comp fall off when you reopen a past run?
+
+    It cannot. The saved run holds every row it collected, reopening reads all
+    of them, and nothing goes back to any website.
+    """
+    reopened = reopen_mod.reopen(build_snapshot(result), MARKET)
+
+    assert [c.address for c in reopened.sold] == [c.address for c in result.sold]
+    assert [c.address for c in reopened.active] == [c.address for c in result.active]
+    for before, after in zip(result.sold, reopened.sold, strict=True):
+        assert after.sold_price == before.sold_price
+        assert after.lot_sqft == before.lot_sqft
+        assert after.sold_date == before.sold_date
+        assert after.brokerage == before.brokerage
+        assert after.agent == before.agent
+        assert after.final_list_price == before.final_list_price
+        assert after.original_list_price == before.original_list_price
+
+
+def test_reopening_keeps_rows_that_could_not_contribute_a_rate(result):
+    """A sale with no published size is still a sale, and must survive."""
+    sizeless = [c.address for c in result.sold if c.lot_sqft is None]
+    assert sizeless, "the fixture set should contain one, or this proves nothing"
+    reopened = reopen_mod.reopen(build_snapshot(result), MARKET)
+    assert set(sizeless) <= {c.address for c in reopened.sold}
+
+
+def test_viewing_a_past_run_recomputes_nothing(result):
+    """`read_stored` hands back the figures the run itself reported."""
+    snapshot = build_snapshot(result)
+    stored = reopen_mod.read_stored(snapshot)
+
+    assert stored.sold_count == result.sold_stats.count
+    assert stored.primary_value == result.valuation.primary.value
+    assert stored.guidance["floor"] == result.guidance.floor
+    assert len(stored.sold) == len(result.sold)
+    assert stored.profile_name == result.profile.name
+    assert stored.window_start == result.window_start.isoformat()
+
+
+def test_the_stored_view_and_a_reopen_agree_today(result):
+    """They should match now. If they ever diverge, the analysis has changed --
+    which is the point of keeping both: the stored view is the historical
+    record, the reopened view is what today's code makes of the same rows."""
+    snapshot = build_snapshot(result)
+    stored = reopen_mod.read_stored(snapshot)
+    reopened = reopen_mod.reopen(snapshot, MARKET)
+    assert stored.primary_value == pytest.approx(reopened.valuation.primary.value)
+    assert stored.sold_count == reopened.sold_stats.count
+
+
+def test_a_stored_view_needs_no_market_plugin(result, tmp_path):
+    """Viewing history must work even if the market definition is unavailable."""
+    path = build_snapshot(result).write(tmp_path / "snap.json")
+    stored = reopen_mod.read_stored_path(str(path))
+    assert stored.primary_value and stored.sold
