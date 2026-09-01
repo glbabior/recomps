@@ -61,11 +61,17 @@ Alongside it: a JSON snapshot of every row and statistic, and a methodology docu
 
 Four ideas hold this up.
 
-**The research layer is an interface, not a hard dependency.** `FixtureResearcher` reads recorded JSON; `LiveResearcher` drives an LLM over the web. They are interchangeable, which is why the entire test suite — including every number the analysis produces — runs offline and deterministically.
+**The research layer is an interface, not a hard dependency.** `FixtureResearcher` reads recorded JSON; `LiveResearcher` researches the web. They are interchangeable, which is why the entire test suite — including every number the analysis produces — runs offline and deterministically.
+
+**Read the page's own data before asking a model to read the page.** Most listing sites are single-page apps that ship their full result set as JSON inside the HTML and render it with JavaScript afterwards. A fetcher that reads only rendered text sees whatever the server pre-rendered — often a handful of cards — and reports that as everything. Parsing the embedded payload instead is exact, free, and complete: on one real index page it returned 40 records rather than 7, with coordinates and canonical URLs that never appear in the visible page at all. The model is the fallback for pages that genuinely have no structured data, which is where it belongs.
+
+**The fetching happens here, not on someone else's servers.** Rate limiting, `robots.txt`, honest identification: these can only be *enforced* where the requests are made. A remote fetching service can only be hoped to behave.
 
 **Fan-out with a budget.** Attribution, price history and geocoding are per-property lookups across dozens of addresses. They run as parallel workers of roughly seven or eight items each, with a per-item tool-call budget and a graceful give-up, and the run reports its own token cost at the end.
 
 **Structured extraction, then verification.** Workers return strictly shaped rows and the orchestrator rejects malformed output. Then nothing enters the dataset without being matched against the sale price and date already known for that property. This is not ceremony — it is what catches a geocoder confidently resolving `Larkspur Vista Rd` to `Larkspur St` half a mile away, and a property page cheerfully reporting a sale from 1998.
+
+**Spending is bounded and reported.** Every run prints its token count and estimated cost, and stops at a ceiling rather than surprising you. A research tool whose cost is invisible is one nobody dares re-run.
 
 **"Not found" is a value.** An unattributable sale renders as `—` and says so in the methodology doc. It is never imputed, never quietly dropped, and never filled with a plausible guess. A dataset that admits its gaps is worth more than one that hides them.
 
@@ -217,6 +223,18 @@ uv venv --python 3.13 && uv pip install -e ".[dev]"
 pytest
 lotcomps run --market demoville --offline --as-of 2026-08-31
 ```
+
+Live research needs the optional extra and Anthropic API credentials:
+
+```bash
+uv pip install -e ".[dev,live]"
+export ANTHROPIC_API_KEY=...
+lotcomps run --market-path ../my-market --live --max-lookups 5 --max-cost 3
+```
+
+`--max-lookups` caps the per-property fan-out, which is where the cost is; a
+capped run is the cheap way to check a market's sources still work before
+committing to a full one.
 
 Tests cover the quadrant classifier (including a divider parcel and the E-street-name trap), bracket selection, sold-to-ask arithmetic, brokerage-family grouping, address normalization, profile validation, snapshot round-trips, and a structural check that a non-land profile genuinely reshapes the workbook. Everything runs offline.
 

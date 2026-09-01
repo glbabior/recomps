@@ -74,6 +74,11 @@ class SourceSpec:
     #: Seconds between requests to this host. Politeness is not optional.
     rate_limit_seconds: float = 2.0
     enabled: bool = True
+    #: Everything else the plugin declared for this source, passed through
+    #: untouched. This is where site-specific detail lives -- the shape of an
+    #: embedded data payload, a search template, a skip list -- so the engine
+    #: can act on it without containing it.
+    config: dict[str, Any] = field(default_factory=dict)
 
 
 @runtime_checkable

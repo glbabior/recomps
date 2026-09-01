@@ -503,6 +503,15 @@ def _choose_profile(market_obj, requested: str | None) -> CompProfile:
 @click.option("--profile", help="Which saved search to run. Prompted if omitted.")
 @click.option("--window", type=int, help="Override the profile's look-back period, in days.")
 @click.option("--offline", is_flag=True, help="Use recorded data; never touch the network.")
+@click.option("--live", "live_mode", is_flag=True,
+              help="Research the web now. Costs money; the run reports how much.")
+@click.option("--max-lookups", type=int, default=None,
+              help="Cap per-property lookups. Useful for a cheap trial run.")
+@click.option("--max-cost", type=float, default=25.0,
+              help="Stop the run if the estimated spend passes this, in dollars.")
+@click.option("--model", default=None, help="Model to use for reading pages.")
+@click.option("--cache-dir", type=click.Path(file_okay=False), default=None,
+              help="Where fetched pages are cached. Defaults to the market's data dir.")
 @click.option("--as-of", type=click.DateTime(formats=["%Y-%m-%d"]),
               help="Treat this date as today. Makes a run reproducible.")
 @click.option("--out", type=click.Path(file_okay=False), default="out",
@@ -510,18 +519,20 @@ def _choose_profile(market_obj, requested: str | None) -> CompProfile:
 @click.option("--compare", "compare_target", default=None,
               help="Compare against a saved run: a snapshot path, or 'last'.")
 @click.option("--no-archive", is_flag=True, help="Do not keep this run in the archive.")
-def run(market, market_path, profile, window, offline, as_of, out, compare_target,
-        no_archive) -> None:
+def run(market, market_path, profile, window, offline, live_mode, max_lookups, max_cost,
+        model, cache_dir, as_of, out, compare_target, no_archive) -> None:
     """Run a search and write the workbook, the archive entry and the write-up."""
     market_obj = _open_market(market, market_path)
     comp_profile = _choose_profile(market_obj, profile)
     if window:
         comp_profile.window_days = window
 
-    if not offline:
+    if offline and live_mode:
+        _fail("--offline and --live ask for opposite things; pick one")
+    if not offline and not live_mode:
         _fail(
-            "live research is not wired up in this build. Run with --offline to use the "
-            "market's recorded data."
+            "say which: --offline reads the market's recorded data, --live researches "
+            "the web now (and costs money)"
         )
 
     window_end = as_of.date() if as_of else date.today()
@@ -530,13 +541,38 @@ def run(market, market_path, profile, window, offline, as_of, out, compare_targe
         if as_of
         else datetime.now(UTC)
     )
+    if live_mode:
+        from lotcomps.research.live import build_live_researcher
+        from lotcomps.research.llm import Budget
+
+        researcher = build_live_researcher(
+            cache_dir or str(Path(market_obj.data_dir()) / "http-cache"),
+            budget=Budget(max_cost_usd=max_cost),
+            model=model,
+            max_lookups=max_lookups,
+        )
+        if not researcher.extractor.available:
+            _fail(
+                "live research needs Anthropic API credentials. Set ANTHROPIC_API_KEY, "
+                "or run with --offline."
+            )
+        click.echo(
+            "Researching. Pages are fetched one at a time per site, so this takes "
+            "a few minutes.\n"
+        )
+    else:
+        researcher = FixtureResearcher()
+
     try:
         result = run_pipeline(
-            market_obj, comp_profile, FixtureResearcher(),
-            window_end=window_end, run_at=run_at,
+            market_obj, comp_profile, researcher, window_end=window_end, run_at=run_at,
         )
     except Exception as exc:
         _fail(str(exc))
+    finally:
+        closer = getattr(getattr(researcher, "fetcher", None), "close", None)
+        if closer:
+            closer()
 
     snapshot = build_snapshot(result)
     changes = None

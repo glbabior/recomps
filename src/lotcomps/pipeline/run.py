@@ -72,6 +72,11 @@ class RunResult:
                 "end to end but its identification heuristics have not been validated against "
                 "a live run. Treat its numbers as provisional.",
             )
+        if self.active_stats.count == 0 and self.sold_stats.count:
+            out.append(
+                "No active listings were collected, so the asking-price basis is "
+                "unavailable rather than zero. See the write-up for why."
+            )
         if self.sold_stats.count == 0:
             out.append("No sold comps in the window; every valuation basis is unavailable.")
         elif self.sold_stats.count < 10:

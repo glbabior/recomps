@@ -120,6 +120,12 @@ def _market_from_toml(raw: dict[str, Any], directory: Path) -> Market:
             quirks=list(s.get("quirks") or []),
             rate_limit_seconds=float(s.get("rate_limit_seconds", 2.0)),
             enabled=bool(s.get("enabled", True)),
+            config={
+                k: v
+                for k, v in s.items()
+                if k not in {"name", "adapter", "role", "url", "quirks",
+                             "rate_limit_seconds", "enabled"}
+            },
         )
         for s in (raw.get("sources") or [])
     ]
