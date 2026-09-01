@@ -2,7 +2,7 @@
 
 Profiles resolve in one order, most specific first:
 
-  1. a profile saved by `lotcomps configure` in the user's config directory,
+  1. a profile saved by `lotcomps profiles new` in the user's config directory,
   2. a profile the market plugin ships,
   3. the built-in vacant-land default.
 
@@ -57,6 +57,48 @@ def save_user_profile(market_name: str, profile: CompProfile) -> Path:
     return path
 
 
+def delete_user_profile(market_name: str, name: str) -> bool:
+    """Remove a saved profile. Returns False if there was nothing to remove.
+
+    Only user profiles can be deleted; a profile the market plugin ships is
+    part of the market definition and is edited there.
+    """
+    path = profiles_path(market_name)
+    if not path.is_file():
+        return False
+    existing = json.loads(path.read_text(encoding="utf-8"))
+    if name not in existing:
+        return False
+    del existing[name]
+    path.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+    return True
+
+
+def profile_origin(market: Market, name: str) -> str:
+    """Where a profile came from: 'saved by you' or 'shipped with the market'."""
+    if name in load_user_profiles(market.name):
+        return "yours"
+    if name in market.profiles():
+        return "market"
+    return "built-in"
+
+
+def describe_profile(profile: CompProfile) -> str:
+    """A one-line summary for listings: what this profile actually searches for."""
+    size = profile.subject_size()
+    unit = "living sqft" if "living" in profile.metric.value else "sqft"
+    parts = [profile.property_type.value.replace("_", " ")]
+    if size:
+        parts.append(f"subject {size:,.0f} {unit}")
+    low, high = (None, None)
+    if size:
+        low, high = profile.similar_bracket.bounds(size)
+    if low and high:
+        parts.append(f"comps {low:,.0f}-{high:,.0f}")
+    parts.append(f"{profile.window_days}d window")
+    return ", ".join(parts)
+
+
 def available_profiles(market: Market) -> dict[str, CompProfile]:
     merged: dict[str, CompProfile] = dict(market.profiles())
     merged.update(load_user_profiles(market.name))
@@ -74,5 +116,5 @@ def resolve_profile(market: Market, name: str | None) -> CompProfile:
     known = ", ".join(sorted(profiles)) or "none"
     raise KeyError(
         f"unknown profile {name!r} for market {market.name!r}; available: {known}. "
-        "Run `lotcomps configure` to create one."
+        "Run `lotcomps profiles new` to create one."
     )

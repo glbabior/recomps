@@ -55,8 +55,12 @@ def _common(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def load_sold(path: Path) -> list[SoldComp]:
-    raw_rows = json.loads(path.read_text(encoding="utf-8"))
+def sold_from_rows(raw_rows: list[dict[str, Any]]) -> list[SoldComp]:
+    """Build sold comps from already-parsed rows.
+
+    Shared with the snapshot reader, so a recorded fixture and an archived run
+    are read by exactly the same code and cannot drift apart.
+    """
     return [
         SoldComp(
             **_common(r),
@@ -70,8 +74,7 @@ def load_sold(path: Path) -> list[SoldComp]:
     ]
 
 
-def load_active(path: Path) -> list[ActiveListing]:
-    raw_rows = json.loads(path.read_text(encoding="utf-8"))
+def active_from_rows(raw_rows: list[dict[str, Any]]) -> list[ActiveListing]:
     return [
         ActiveListing(
             **_common(r),
@@ -80,6 +83,14 @@ def load_active(path: Path) -> list[ActiveListing]:
         )
         for r in raw_rows
     ]
+
+
+def load_sold(path: Path) -> list[SoldComp]:
+    return sold_from_rows(json.loads(path.read_text(encoding="utf-8")))
+
+
+def load_active(path: Path) -> list[ActiveListing]:
+    return active_from_rows(json.loads(path.read_text(encoding="utf-8")))
 
 
 class FixtureResearcher:

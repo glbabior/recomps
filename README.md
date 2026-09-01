@@ -125,8 +125,37 @@ That indirection is the difference between a profile layer that parameterizes th
 Build one interactively:
 
 ```bash
-lotcomps configure --market demoville
+lotcomps profiles new --market demoville
 ```
+
+## Saved searches and saved runs
+
+A profile is a saved question. Running it produces an answer, and every answer is archived under the profile that produced it rather than overwriting the last one:
+
+```
+data/runs/<market>__<profile>/<timestamp>/
+    snapshot.json     every row and every statistic
+    comps.xlsx        the workbook, as it was that day
+    methodology.md    what the run actually did
+```
+
+```bash
+lotcomps profiles                    # what searches are saved, and how often each has run
+lotcomps profiles show empty-lots    # what exactly this one asks for
+lotcomps profiles new --from empty-lots   # a variation on an existing search
+lotcomps history                     # every run, newest first
+lotcomps run --compare last          # what moved since the previous run of this profile
+```
+
+A saved run can be **reopened**, which is more than reading its numbers back. The archive keeps the rows the run collected, so the analysis can be run over them again — to reprint the workbook months later, or to ask a different question of the same sales without going back to any website:
+
+```bash
+lotcomps render --run 2026-08-04                     # reprint that day's workbook
+lotcomps render --run last --subject-size 7500       # what if my lot were bigger
+lotcomps render --run last --exclude "12 Example St" # drop a comp you disagree with
+```
+
+Reopening deliberately re-runs the analysis rather than restoring the saved figures. Restoring them would let a saved run and a fresh one disagree about what the same numbers mean; recomputing cannot. It also uses the profile *as it was at the time of the run*, so editing a profile later does not change what a past run meant.
 
 > **Scope honesty.** Vacant land is the validated reference path; every golden number in the regression suite comes from a real land dataset. Improved-property profiles are wired end to end and tested structurally, but their identification heuristics have not been validated against a live run. They ship marked experimental, and say so in their own output.
 
@@ -174,6 +203,12 @@ They are shaped to break things rather than to look realistic: a parcel over the
 - Live adapters must rate-limit, identify themselves honestly, and respect `robots.txt`. No captcha evasion, no header spoofing. An adapter that cannot fetch a page logs it and continues; it does not pretend.
 - **Output is market research, not an appraisal.** The author is not a licensed appraiser and this tool does not present itself as one. Every artifact it writes says so.
 - Real addresses, subject properties and run snapshots stay in private plugins. CI enforces it.
+
+## Interfaces
+
+The command line is the engine's first interface, not its only intended one. Every operation above — listing profiles, editing one, running a search, browsing run history, reopening a past run, regenerating its workbook — is a plain Python call that the command line merely wraps. A graphical interface is planned as the primary way to use this, and it drives the same calls.
+
+That boundary is deliberate. The analysis hands back one result object; the workbook writer, the methodology renderer and the comparison report are each just a consumer of it. A screen, a map, or a web page is another consumer, and adding one requires nothing to be undone.
 
 ## Development
 
