@@ -19,6 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from lotcomps.config.profile import CompProfile
+from lotcomps.model.address import AddressKey
 from lotcomps.model.comp import ActiveListing, Comp, SoldComp
 
 
@@ -39,11 +40,13 @@ class FilterResult:
     #: cannot contribute to $/sqft statistics (F1). Logged, not dropped.
     missing_metric: list[str] = field(default_factory=list)
     reconciled: list[str] = field(default_factory=list)
+    #: Rows that were the same property listed twice by a source.
+    duplicates: list[str] = field(default_factory=list)
 
 
 def _exclusion_reason(comp: Comp, profile: CompProfile) -> str | None:
     ex = profile.exclusions
-    if str(comp.key) in set(ex.explicit_address_keys):
+    if str(comp.key_for(profile.identification)) in set(ex.explicit_address_keys):
         return "on the market's explicit exclusion list"
     lot = comp.lot_sqft
     if lot is not None:
@@ -62,8 +65,31 @@ def apply_filters(
     """Apply F3 to a freshly collected dataset."""
     result = FilterResult()
     denominator = profile.metric.value
+    identification = profile.identification
 
-    sold_keys = {c.key for c in sold}
+    # Deduplicate the sold side before anything else. A source can list one
+    # sale twice -- once bare and once with an MLS lot suffix -- and counting
+    # it twice would shift every statistic downstream.
+    seen: dict[AddressKey, SoldComp] = {}
+    for comp in sold:
+        key = comp.key_for(identification)
+        previous = seen.get(key)
+        if previous is None:
+            seen[key] = comp
+            continue
+        # Keep whichever row carries more of the fields we need.
+        def completeness(c: SoldComp) -> int:
+            return sum(
+                1 for v in (c.lot_sqft, c.living_sqft, c.brokerage, c.agent,
+                            c.final_list_price, c.sold_date, c.lat)
+                if v is not None
+            )
+        if completeness(comp) > completeness(previous):
+            seen[key] = comp
+        result.duplicates.append(comp.address)
+    sold = list(seen.values())
+
+    sold_keys = set(seen)
     for comp in sold:
         reason = _exclusion_reason(comp, profile)
         if reason:
@@ -75,7 +101,7 @@ def apply_filters(
 
     for listing in active:
         # A listing that already appears in the sold set has closed (F3).
-        if listing.key in sold_keys:
+        if listing.key_for(identification) in sold_keys:
             result.reconciled.append(listing.address)
             continue
         reason = _exclusion_reason(listing, profile)

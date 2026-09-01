@@ -46,20 +46,36 @@ _DIRECTIONS = {
     "southwest": "sw", "sw": "sw",
 }
 
-# A unit designator is normalized, never stripped: "Apt 2", "Unit 2" and "#2"
-# are the same home, but none of them is the same property as the bare street
-# address. Dropping the unit would silently merge every condo in a building.
+# A trailing "#n" means two opposite things depending on the property type, and
+# getting it wrong corrupts the dataset in one of two ways.
+#
+# On a condo it is the home's identity: "410 Bellweather Rd #2" and "#3" are
+# different properties, and stripping the suffix merges a whole building into
+# one address.
+#
+# On vacant land it is an artifact. MLS records append a lot or listing number
+# to parcel addresses -- "125 W Thistle St #18", "607 Larkspur St #34" -- and
+# the same sale appears both with and without it, sometimes as two rows on one
+# page. Keeping the suffix there double-counts sales and breaks the join that
+# attaches attribution to a comp.
+#
+# So the caller decides, and the comp profile tells it which case it is: see
+# `Identification.unit_suffix_is_significant`.
 _UNIT_RE = re.compile(r"(?:\b(?:apt|apartment|unit|ste|suite)\b\.?|#)\s*([\w-]+)", re.IGNORECASE)
 _PUNCT_RE = re.compile(r"[.,]")
 _WS_RE = re.compile(r"\s+")
 
 
-def normalize_address(raw: str) -> str:
+def normalize_address(raw: str, keep_unit: bool = True) -> str:
     """Return a canonical lowercase token string for `raw`.
 
-    Drops unit designators, city/state/ZIP tails, and punctuation; canonicalizes
-    directionals and street types. An un-numbered parcel ("0 Larkspur Vista Rd")
-    keeps its leading 0, which is what the sources use as the house number.
+    Drops city/state/ZIP tails and punctuation; canonicalizes directionals and
+    street types. An un-numbered parcel ("0 Larkspur Vista Rd") keeps its
+    leading 0, which is what the sources use as the house number.
+
+    `keep_unit` decides whether a trailing "#n" is part of the identity -- true
+    for a condo, false for a parcel, where it is an MLS listing number. See the
+    note on `_UNIT_RE`.
     """
     if not raw:
         return ""
@@ -84,7 +100,7 @@ def normalize_address(raw: str) -> str:
             out.append(_SUFFIXES[tok])
         else:
             out.append(tok)
-    if unit:
+    if unit and keep_unit:
         out.append(unit)
     return " ".join(out)
 
@@ -96,8 +112,8 @@ class AddressKey:
     key: str
 
     @classmethod
-    def of(cls, raw: str) -> AddressKey:
-        return cls(normalize_address(raw))
+    def of(cls, raw: str, keep_unit: bool = True) -> AddressKey:
+        return cls(normalize_address(raw, keep_unit=keep_unit))
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.key

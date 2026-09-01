@@ -60,7 +60,14 @@ class Comp:
 
     @property
     def key(self) -> AddressKey:
+        """Identity including any unit suffix. Prefer `key_for` where a profile
+        is available -- it knows whether the suffix means anything."""
         return AddressKey.of(self.address)
+
+    def key_for(self, identification: Any) -> AddressKey:
+        """Identity under the active profile's rule about "#n" suffixes."""
+        keep = bool(getattr(identification, "unit_suffix_is_significant", True))
+        return AddressKey.of(self.address, keep_unit=keep)
 
     def metric_sqft(self, denominator: str) -> float | None:
         """Return the $/sqft denominator named by the active profile."""

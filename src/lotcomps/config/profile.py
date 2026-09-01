@@ -63,6 +63,11 @@ class Identification:
     type_labels: list[str] = field(default_factory=lambda: ["LOT", "LAND"])
     #: A sale including a habitable structure is excluded outright (F1, land).
     exclude_habitable_structure: bool = True
+    #: Whether a trailing "#n" in an address is part of the property's identity.
+    #: True for a condo, where it is the unit. False for land and detached
+    #: houses, where MLS records append a lot or listing number that appears on
+    #: some rows and not others -- keeping it there double-counts sales.
+    unit_suffix_is_significant: bool = False
 
     def matches(self, *, has_bed_bath: bool, label: str | None = None) -> bool:
         if label and any(t.lower() in label.lower() for t in self.type_labels):

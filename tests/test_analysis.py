@@ -400,3 +400,55 @@ def test_ungeocoded_parcels_are_reported_not_hidden():
     )
     assert table.unclassified_sold == 1
     assert any("could not be geocoded" in n for n in table.notes)
+
+
+# ---------------------------------------------------------------------------
+# MLS lot-number suffixes (observed in real source data)
+# ---------------------------------------------------------------------------
+
+
+def test_a_lot_suffix_is_an_artifact_not_an_identity():
+    """MLS appends a lot number to parcel addresses; the same sale appears
+    both with and without it, sometimes as two rows on one page."""
+    from lotcomps.config.profile import Identification
+
+    land = Identification(unit_suffix_is_significant=False)
+    bare = SoldComp(address="607 Larkspur St")
+    suffixed = SoldComp(address="607 Larkspur St #34")
+    assert bare.key_for(land) == suffixed.key_for(land)
+
+
+def test_a_condo_unit_is_an_identity_not_an_artifact():
+    from lotcomps.config.profile import Identification
+
+    condo = Identification(unit_suffix_is_significant=True)
+    two = SoldComp(address="410 Bellweather Rd #2")
+    three = SoldComp(address="410 Bellweather Rd #3")
+    assert two.key_for(condo) != three.key_for(condo)
+
+
+def test_the_same_sale_listed_twice_is_counted_once():
+    """The failure this prevents: every statistic shifts on a phantom sale."""
+    profile = _land_profile()
+    comps = [
+        SoldComp(address="607 Larkspur St", lot_sqft=6534, sold_price=550000,
+                 sold_date=date(2026, 7, 13)),
+        SoldComp(address="607 Larkspur St #34", lot_sqft=6534, sold_price=550000,
+                 sold_date=date(2026, 7, 13), brokerage="Cornerpost Real Estate"),
+    ]
+    result = apply_filters(comps, [], profile)
+    assert len(result.sold) == 1
+    assert result.duplicates == ["607 Larkspur St #34"]
+    # The surviving row is the one carrying more information.
+    assert result.sold[0].brokerage == "Cornerpost Real Estate"
+
+
+def test_a_suffixed_listing_reconciles_against_a_bare_sale():
+    """Attribution joins across sources fail if the suffix blocks the match."""
+    profile = _land_profile()
+    sold = [SoldComp(address="125 W Thistle St", lot_sqft=5227, sold_price=475000)]
+    active = [ActiveListing(address="125 W Thistle St #18", lot_sqft=5227,
+                            list_price=425000)]
+    result = apply_filters(sold, active, profile)
+    assert result.active == []
+    assert result.reconciled == ["125 W Thistle St #18"]
