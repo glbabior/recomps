@@ -460,3 +460,67 @@ def test_the_extraction_schema_allows_every_field_to_be_absent():
     assert facts.listing_agent is None
     assert facts.dual_agency_stated is False
     assert json.loads(facts.model_dump_json())["listing_brokerage"] is None
+
+
+def test_a_sale_listed_twice_at_the_same_price_is_not_an_anomaly():
+    """Dedup already collapses these. Reporting them trains readers to skip
+    the anomaly list, which is where the real ones live."""
+    assert flag_anomalous_rows([
+        SoldComp(address="607 Larkspur St", sold_price=550000, sold_date=date(2026, 7, 13)),
+        SoldComp(address="607 Larkspur St #34", sold_price=550000, sold_date=date(2026, 7, 13)),
+    ]) == []
+
+
+def test_a_near_identical_price_is_still_the_same_sale():
+    """Sources round differently: $821,000 and $820,999 are one transaction."""
+    assert flag_anomalous_rows([
+        SoldComp(address="677 E Chandler St", sold_price=821000, sold_date=date(2026, 8, 11)),
+        SoldComp(address="677 E Chandler St #48", sold_price=820999, sold_date=date(2026, 8, 11)),
+    ]) == []
+
+
+def test_a_genuinely_different_sale_is_still_flagged():
+    notes = flag_anomalous_rows([
+        SoldComp(address="1 A St", sold_price=800000, sold_date=date(2026, 1, 26)),
+        SoldComp(address="1 A St", sold_price=615000, sold_date=date(2026, 5, 12)),
+    ])
+    assert len(notes) == 1
+
+
+# ---------------------------------------------------------------------------
+# Trimming a page before reading it
+# ---------------------------------------------------------------------------
+
+
+def test_trimming_keeps_the_lines_that_carry_facts():
+    from lotcomps.adapters.html import focus_text
+
+    page = (
+        "Address and headline. " + ("navigation filler. " * 400)
+        + "Listed by A. Example DRE# 01234567 with Example Realty. "
+        + ("mortgage calculator copy. " * 400)
+        + "Price history: Sold on Aug 28, 2026 for $550,000. List price $615,000. "
+        + ("neighbourhood reviews. " * 400)
+        + "Lot size 11,645 sq ft. "
+        + ("similar listings. " * 400)
+    )
+    out = focus_text(page, max_chars=6000)
+    assert len(out) < len(page) / 3
+    for fact in ("A. Example", "Example Realty", "$550,000", "$615,000", "11,645"):
+        assert fact in out, f"{fact} was cut"
+    assert "Address and headline" in out, "the top of the page is always kept"
+
+
+def test_trimming_marks_where_it_cut():
+    """A reader must not infer across a gap it cannot see."""
+    from lotcomps.adapters.html import focus_text
+
+    page = "Listed by X. " + ("filler " * 5000) + "Price history here."
+    assert "[...]" in focus_text(page, max_chars=2000)
+
+
+def test_a_short_page_is_left_alone():
+    from lotcomps.adapters.html import focus_text
+
+    page = "Listed by A. Example with Example Realty."
+    assert focus_text(page) == page

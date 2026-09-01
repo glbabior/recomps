@@ -265,6 +265,16 @@ def flag_anomalous_rows(comps: list[SoldComp]) -> list[str]:
         if previous is None:
             seen[key] = comp
             continue
+        # Two rows for one parcel are usually the same sale listed twice -- once
+        # bare and once with an MLS lot suffix, occasionally a dollar apart.
+        # Deduplication collapses those silently, so reporting them as anomalies
+        # is noise that trains the reader to skip the anomaly list. Only a
+        # genuinely different price or a genuinely different date is worth a
+        # human's attention.
+        same_price = prices_match(previous.sold_price, comp.sold_price)
+        same_date = dates_match(previous.sold_date, comp.sold_date)
+        if same_price and same_date:
+            continue
         notes.append(
             f"{comp.address} appears to have sold twice in this window "
             f"({previous.sold_date} at {previous.sold_price:,.0f}; "

@@ -71,7 +71,7 @@ Four ideas hold this up.
 
 **Structured extraction, then verification.** Workers return strictly shaped rows and the orchestrator rejects malformed output. Then nothing enters the dataset without being matched against the sale price and date already known for that property. This is not ceremony — it is what catches a geocoder confidently resolving `Larkspur Vista Rd` to `Larkspur St` half a mile away, and a property page cheerfully reporting a sale from 1998.
 
-**Spending is bounded and reported.** Every run prints its token count and estimated cost, and stops at a ceiling rather than surprising you. A research tool whose cost is invisible is one nobody dares re-run.
+**Spending is bounded, reported, and mostly avoidable.** Every run prints its token count and cost and stops at a ceiling. More usefully: the step that produces the most data — the complete result set, with coordinates and canonical URLs — is plain parsing and costs nothing at all. Only the per-property reading is metered, and pages are trimmed to the regions that carry facts before being sent. On real pages that cut them to under a quarter of their size with byte-identical extraction across every page tested.
 
 **"Not found" is a value.** An unattributable sale renders as `—` and says so in the methodology doc. It is never imputed, never quietly dropped, and never filled with a plausible guess. A dataset that admits its gaps is worth more than one that hides them.
 
@@ -224,17 +224,26 @@ pytest
 lotcomps run --market demoville --offline --as-of 2026-08-31
 ```
 
-Live research needs the optional extra and Anthropic API credentials:
+Live research needs the optional extra:
 
 ```bash
 uv pip install -e ".[dev,live]"
-export ANTHROPIC_API_KEY=...
-lotcomps run --market-path ../my-market --live --max-lookups 5 --max-cost 3
+lotcomps run --market-path ../my-market --live
 ```
 
-`--max-lookups` caps the per-property fan-out, which is where the cost is; a
-capped run is the cheap way to check a market's sources still work before
-committing to a full one.
+**Who pays for the page reading is a choice.** `--via subscription` (the
+default) drives the `claude` CLI, so usage counts against a Claude subscription
+and nothing is billed per page. `--via api` calls the Messages API and bills an
+API account per token, with `--max-cost` as a ceiling.
+
+One trap worth knowing: an `ANTHROPIC_API_KEY` in the environment **shadows** a
+signed-in subscription, so a tool that inherits it gets billed even though the
+user has a plan. The subscription route removes it from the child process for
+exactly that reason.
+
+`--max-lookups` caps the per-property fan-out, which is where nearly all the
+cost sits; a capped run is the cheap way to check a market's sources still work
+before committing to a full one.
 
 Tests cover the quadrant classifier (including a divider parcel and the E-street-name trap), bracket selection, sold-to-ask arithmetic, brokerage-family grouping, address normalization, profile validation, snapshot round-trips, and a structural check that a non-land profile genuinely reshapes the workbook. Everything runs offline.
 

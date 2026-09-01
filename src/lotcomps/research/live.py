@@ -37,7 +37,7 @@ from datetime import date, datetime
 from lotcomps.adapters.embedded import EmbeddedSpec, extract_records
 from lotcomps.adapters.fetch import PoliteFetcher
 from lotcomps.adapters.geocode import VerifyingGeocoder
-from lotcomps.adapters.html import looks_like_a_block_page, reduce_html
+from lotcomps.adapters.html import focus_text, looks_like_a_block_page, reduce_html
 from lotcomps.config.profile import CompProfile
 from lotcomps.model.comp import ActiveListing, SoldComp
 from lotcomps.plugin.market import Market, SourceSpec
@@ -54,9 +54,14 @@ from lotcomps.research.verify import Claim, VerificationLog, apply_claims, flag_
 #: Workers in the fan-out. The per-host lock in the fetcher keeps any one site
 #: serial regardless, so this bounds concurrency across sites, not at one.
 DEFAULT_WORKERS = 4
-#: Characters of reduced page text sent to the extractor. Enough for a listing
-#: page's content and price history; beyond this is navigation and reviews.
-DEFAULT_PAGE_CHARS = 60_000
+#: Characters of page text kept before the reading step. A property page runs
+#: to sixty thousand characters of which the facts are a few hundred, and on a
+#: measured page 97% of the cost was input tokens. Trimming to the regions that
+#: sit beside facts cut pages to under a quarter of their size with identical
+#: extraction across every page tested.
+DEFAULT_PAGE_CHARS = 14_000
+#: The reduction applied before focusing, purely to bound parsing work.
+RAW_PAGE_CHARS = 200_000
 
 
 @dataclass
@@ -196,7 +201,10 @@ class LiveResearcher:
         if looks_like_a_block_page(response.text):
             return comp, [], f"{comp.address}: {url} served a challenge page"
 
-        text = reduce_html(response.text, max_chars=self.page_chars)
+        text = focus_text(
+            reduce_html(response.text, max_chars=RAW_PAGE_CHARS),
+            max_chars=self.page_chars,
+        )
         result = self.extractor.extract(
             text,
             PropertyPageFacts,
@@ -373,6 +381,7 @@ class LiveResearcher:
 def build_live_researcher(
     cache_dir: str,
     *,
+    via: str = "subscription",
     budget: Budget | None = None,
     model: str | None = None,
     workers: int = DEFAULT_WORKERS,
@@ -387,7 +396,19 @@ def build_live_researcher(
 
     cache = PageCache(cache_dir, ttl_seconds=cache_ttl)
     fetcher = PoliteFetcher(cache, delay_seconds=delay_seconds)
-    extractor = ExtractionClient(model=model or DEFAULT_MODEL, budget=budget or Budget())
+
+    # Two ways to do the reading, and the difference is who pays. Through a
+    # Claude subscription the usage counts against that plan; through the API
+    # it is billed per token. The fetching is local either way, so the
+    # politeness rules hold in both.
+    if via == "api":
+        extractor = ExtractionClient(model=model or DEFAULT_MODEL, budget=budget or Budget())
+    elif via == "subscription":
+        from lotcomps.research.claude_code import DEFAULT_CLI_MODEL, ClaudeCodeExtractor
+
+        extractor = ClaudeCodeExtractor(model=model or DEFAULT_CLI_MODEL, budget=budget)
+    else:
+        raise ValueError(f"unknown reading route {via!r}; use 'subscription' or 'api'")
     geocoder = VerifyingGeocoder(CensusGeocoder(fetcher), ArcGISGeocoder(fetcher))
     return LiveResearcher(
         fetcher, extractor, geocoder, workers=workers, enrich=enrich,

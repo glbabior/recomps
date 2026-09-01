@@ -136,6 +136,78 @@ def reduce_html(
     return combined
 
 
+#: Words that sit next to the facts a comp needs. Matching is loose on purpose:
+#: sites phrase attribution as "Listed by", "Listing courtesy of", "Presented
+#: by", and price history as a table, a timeline, or a paragraph.
+DEFAULT_FOCUS_TERMS = (
+    "listed by", "listing courtesy", "courtesy of", "presented by", "bought with",
+    "sold by", "buyer's agent", "buyers agent", "listing agent", "listing provided",
+    "dre #", "dre#", "lic #", "license #", "brokerage",
+    "price history", "sold on", "sold for", "last sold", "closed on",
+    "list price", "listed on", "price change", "price reduced", "relisted",
+    "lot size", "lot area", "square foot", "square feet", "sq ft", "sqft", "acres",
+    "mls #", "mls#", "listing id",
+)
+
+
+def focus_text(
+    text: str,
+    terms: tuple[str, ...] = DEFAULT_FOCUS_TERMS,
+    window: int = 900,
+    max_chars: int = 14_000,
+    head: int = 1_500,
+) -> str:
+    """Keep the parts of a page near the facts, and drop the rest.
+
+    A property page is mostly mortgage calculators, neighbourhood copy, similar
+    listings and reviews. The attribution line and the price history are a few
+    hundred characters in total. Sending the whole page means paying to have
+    almost all of it ignored -- on a measured page, 97% of the cost was input
+    tokens, and nearly all of those were irrelevant.
+
+    This keeps a window either side of every term that tends to sit beside a
+    fact, merges the windows that overlap, and always keeps the top of the page
+    where the address and headline price live. Gaps are marked so the reader
+    knows the text is not continuous and should not infer across a cut.
+
+    Deliberately generous: the cost of keeping too much is a few cents, and the
+    cost of cutting out the one line naming the agent is a missing attribution.
+    """
+    if len(text) <= max_chars:
+        return text
+
+    lowered = text.lower()
+    spans: list[tuple[int, int]] = [(0, min(head, len(text)))]
+    for term in terms:
+        start = 0
+        while True:
+            found = lowered.find(term, start)
+            if found == -1:
+                break
+            spans.append((max(0, found - window // 2), min(len(text), found + window)))
+            start = found + len(term)
+
+    spans.sort()
+    merged: list[list[int]] = []
+    for span_start, span_end in spans:
+        if merged and span_start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], span_end)
+        else:
+            merged.append([span_start, span_end])
+
+    pieces: list[str] = []
+    total = 0
+    for span_start, span_end in merged:
+        piece = text[span_start:span_end]
+        if total + len(piece) > max_chars:
+            piece = piece[: max_chars - total]
+        pieces.append(piece)
+        total += len(piece)
+        if total >= max_chars:
+            break
+    return "\n[...]\n".join(pieces)
+
+
 def looks_like_a_block_page(text: str) -> bool:
     """Whether a 200 response is actually a challenge or refusal page.
 

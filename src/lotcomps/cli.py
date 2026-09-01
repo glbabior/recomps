@@ -509,6 +509,10 @@ def _choose_profile(market_obj, requested: str | None) -> CompProfile:
               help="Cap per-property lookups. Useful for a cheap trial run.")
 @click.option("--max-cost", type=float, default=25.0,
               help="Stop the run if the estimated spend passes this, in dollars.")
+@click.option("--via", type=click.Choice(["subscription", "api"]), default="subscription",
+              show_default=True,
+              help="Who pays for the page reading: your Claude subscription, or a "
+                   "metered API account.")
 @click.option("--model", default=None, help="Model to use for reading pages.")
 @click.option("--cache-dir", type=click.Path(file_okay=False), default=None,
               help="Where fetched pages are cached. Defaults to the market's data dir.")
@@ -520,7 +524,7 @@ def _choose_profile(market_obj, requested: str | None) -> CompProfile:
               help="Compare against a saved run: a snapshot path, or 'last'.")
 @click.option("--no-archive", is_flag=True, help="Do not keep this run in the archive.")
 def run(market, market_path, profile, window, offline, live_mode, max_lookups, max_cost,
-        model, cache_dir, as_of, out, compare_target, no_archive) -> None:
+        via, model, cache_dir, as_of, out, compare_target, no_archive) -> None:
     """Run a search and write the workbook, the archive entry and the write-up."""
     market_obj = _open_market(market, market_path)
     comp_profile = _choose_profile(market_obj, profile)
@@ -547,15 +551,26 @@ def run(market, market_path, profile, window, offline, live_mode, max_lookups, m
 
         researcher = build_live_researcher(
             cache_dir or str(Path(market_obj.data_dir()) / "http-cache"),
-            budget=Budget(max_cost_usd=max_cost),
+            via=via,
+            budget=Budget(max_cost_usd=max_cost) if via == "api" else None,
             model=model,
             max_lookups=max_lookups,
         )
         if not researcher.extractor.available:
             _fail(
-                "live research needs Anthropic API credentials. Set ANTHROPIC_API_KEY, "
-                "or run with --offline."
+                "live research needs the `claude` CLI signed in to a Claude "
+                "subscription. Run `claude auth login`, or use --via api with "
+                "ANTHROPIC_API_KEY set, or run with --offline."
+                if via == "subscription"
+                else "live research via the API needs ANTHROPIC_API_KEY set."
             )
+        payer = getattr(researcher.extractor, "pays_from", None)
+        if payer:
+            click.secho(f"Reading pages via your {payer}. Usage counts against that "
+                        "plan; you are not billed per page.", fg="cyan")
+        else:
+            click.secho("Reading pages via the metered API. This run will be billed "
+                        f"to your API account, up to ${max_cost:,.2f}.", fg="yellow")
         click.echo(
             "Researching. Pages are fetched one at a time per site, so this takes "
             "a few minutes.\n"
