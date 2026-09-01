@@ -190,6 +190,29 @@ def test_no_adjustments_means_nothing_to_describe():
 # ---------------------------------------------------------------------------
 
 
+def _capture_launch(monkeypatch, interactive: bool = True) -> dict:
+    """Run the CLI without actually starting a server or a browser."""
+    from recomps import cli
+
+    launched: dict = {}
+
+    class FakeProcess:
+        def wait(self):
+            return 0
+
+        def terminate(self):
+            launched["terminated"] = True
+
+    def fake_popen(command, **kwargs):
+        launched["command"] = command
+        return FakeProcess()
+
+    monkeypatch.setattr(cli, "_interactive", lambda: interactive)
+    monkeypatch.setattr(cli, "_open_when_ready", lambda url, **kw: launched.setdefault("url", url))
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+    return launched
+
+
 def test_bare_command_opens_the_interface_for_a_person(monkeypatch):
     """This is a tool people use by looking at it, so a bare invocation in a
     terminal should show them something rather than a menu."""
@@ -197,24 +220,56 @@ def test_bare_command_opens_the_interface_for_a_person(monkeypatch):
 
     from recomps import cli
 
-    launched = {}
-
-    def fake_run(command, **kwargs):
-        launched["command"] = command
-        return type("Completed", (), {"returncode": 0})()
-
-    monkeypatch.setattr(cli, "_interactive", lambda: True)
-    monkeypatch.setattr("subprocess.run", fake_run)
-
+    launched = _capture_launch(monkeypatch)
     result = CliRunner().invoke(cli.main, [])
     assert result.exit_code == 0, result.output
 
     command = launched["command"]
     assert "streamlit" in command and "run" in command
     assert any(part.endswith("app.py") for part in command), "must point at the app"
-    port_at = command.index("--server.port")
-    assert command[port_at + 1] == "8501"
+    assert command[command.index("--server.port") + 1] == "8501"
+    assert launched["url"] == "http://localhost:8501"
     assert "localhost:8501" in result.output, "tell the user where to look"
+
+
+def test_the_interface_is_not_exposed_to_the_network(monkeypatch):
+    """A page showing what your property is worth should not be reachable from
+    every device on the network, which is what the default binding does."""
+    from click.testing import CliRunner
+
+    from recomps import cli
+
+    launched = _capture_launch(monkeypatch)
+    CliRunner().invoke(cli.main, [])
+
+    command = launched["command"]
+    assert command[command.index("--server.address") + 1] == "localhost"
+
+
+def test_usage_statistics_are_not_sent(monkeypatch):
+    from click.testing import CliRunner
+
+    from recomps import cli
+
+    launched = _capture_launch(monkeypatch)
+    CliRunner().invoke(cli.main, [])
+    command = launched["command"]
+    assert command[command.index("--browser.gatherUsageStats") + 1] == "false"
+
+
+def test_the_onboarding_prompt_is_declined_but_a_real_answer_is_kept(monkeypatch, tmp_path):
+    """Left alone, Streamlit blocks a first launch asking for an email, which
+    reads as the program being broken. An answer already given is not touched."""
+    from recomps import cli
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    cli._silence_streamlit_onboarding()
+    written = tmp_path / ".streamlit" / "credentials.toml"
+    assert written.exists() and 'email = ""' in written.read_text()
+
+    written.write_text('[general]\nemail = "someone@example.com"\n', encoding="utf-8")
+    cli._silence_streamlit_onboarding()
+    assert "someone@example.com" in written.read_text(), "an existing answer must survive"
 
 
 def test_bare_command_in_a_script_prints_help_instead(monkeypatch):
@@ -227,7 +282,7 @@ def test_bare_command_in_a_script_prints_help_instead(monkeypatch):
         raise AssertionError("must not launch a server when nobody is watching")
 
     monkeypatch.setattr(cli, "_interactive", lambda: False)
-    monkeypatch.setattr("subprocess.run", explode)
+    monkeypatch.setattr("subprocess.Popen", explode)
 
     result = CliRunner().invoke(cli.main, [])
     assert result.exit_code == 0

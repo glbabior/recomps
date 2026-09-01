@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import shutil
 import sys
+import time
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -825,6 +826,59 @@ def compare(prior, current) -> None:
     click.echo(report.as_text())
 
 
+def _open_when_ready(url: str, timeout: float = 30.0) -> None:
+    """Open a browser once the server answers, not before.
+
+    Opening immediately shows an error page, because the server takes a second
+    or two to bind. Waiting for it to answer means the first thing the user
+    sees is the app.
+    """
+    import threading
+    import urllib.error
+    import urllib.request
+    import webbrowser
+
+    def wait_then_open() -> None:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                urllib.request.urlopen(url, timeout=2)
+            except urllib.error.HTTPError:
+                break  # answering at all is enough
+            except Exception:
+                time.sleep(0.4)
+                continue
+            else:
+                break
+        webbrowser.open(url)
+
+    threading.Thread(target=wait_then_open, daemon=True).start()
+
+
+def _silence_streamlit_onboarding() -> None:
+    """Stop Streamlit asking for an email address on first launch.
+
+    Left alone, Streamlit greets a first run by prompting for an email and
+    waiting on standard input. Someone who double-clicks the program gets a
+    console asking them to sign up for a newsletter, and the interface never
+    opens -- which reads as the program being broken.
+
+    Writing an empty credentials file is Streamlit's own documented way to
+    decline. An existing file is never touched: the user may have put a real
+    address there deliberately.
+    """
+    config = Path.home() / ".streamlit" / "credentials.toml"
+    if config.exists():
+        return
+    try:
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text('[general]\nemail = ""\n', encoding="utf-8")
+    except OSError:
+        # Not being able to write this is not a reason to refuse to start.
+        # The worst case is the prompt the user was going to see anyway.
+        pass
+
+
 @main.command()
 @market_options
 @click.option("--port", type=int, default=8501, show_default=True)
@@ -844,20 +898,35 @@ def ui(market, market_path, port) -> None:
             'pip install -e ".[ui]"'
         )
 
+    _silence_streamlit_onboarding()
+
     app = Path(__file__).resolve().parent / "ui" / "app.py"
+    url = f"http://localhost:{port}"
     command = [
         sys.executable, "-m", "streamlit", "run", str(app),
         "--server.port", str(port),
-        "--server.headless", "false",
+        # Bind to this machine only. The default listens on every interface,
+        # which puts a page showing what your property is worth on the local
+        # network. Nothing here needs to be reachable from another device.
+        "--server.address", "localhost",
+        # Headless so Streamlit does not open its own browser tab and print its
+        # banner; the tab is opened below, once the server is actually up.
+        "--server.headless", "true",
         "--browser.gatherUsageStats", "false",
+        "--global.developmentMode", "false",
     ]
-    click.echo(f"Opening REComps at http://localhost:{port}")
-    click.echo("Press Ctrl+C here to stop it.")
+
+    click.secho(f"REComps is starting at {url}", bold=True)
+    click.echo("Your browser should open. Press Ctrl+C here to stop it.")
     click.echo("")
+
+    process = subprocess.Popen(command)
+    _open_when_ready(url)
     try:
-        subprocess.run(command, check=False)
+        process.wait()
     except KeyboardInterrupt:
-        click.echo("Stopped.")
+        process.terminate()
+    click.echo("Stopped.")
 
 
 @main.command(hidden=True)
