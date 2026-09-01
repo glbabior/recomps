@@ -9,18 +9,18 @@ Most real markets should be **private**. A market plugin holds real addresses, r
 **A directory** — the normal choice for a private market. Nothing to install, nothing to publish; clone it beside the engine and point at it.
 
 ```bash
-lotcomps run --market-path ../my-market --offline
+recomps run --market-path ../my-market --offline
 ```
 
 **An installed package with an entry point** — the choice for a market you want on `pip install`. The bundled Demoville market registers this way:
 
 ```toml
-[project.entry-points."lotcomps.markets"]
+[project.entry-points."recomps.markets"]
 mymarket = "my_package:MARKET"
 ```
 
 ```bash
-lotcomps run --market mymarket --offline
+recomps run --market mymarket --offline
 ```
 
 Both resolve to the same `Market` protocol. Nothing downstream can tell them apart.
@@ -125,7 +125,7 @@ Notes that matter:
 `explicit_address_keys` uses the engine's canonical form: lowercase, punctuation dropped, directionals and street types abbreviated, city/state/ZIP tail removed, unit designators kept as `#n`.
 
 ```python
->>> from lotcomps.model.address import normalize_address
+>>> from recomps.model.address import normalize_address
 >>> normalize_address("9100 Quarry Rd, Demoville, ZZ 00000")
 '9100 quarry rd'
 ```
@@ -147,7 +147,7 @@ A parcel is compared against the latitude interpolated at its own longitude. Out
 The engine ships executable checks so the interface cannot drift out from under a plugin it never sees:
 
 ```python
-from lotcomps.testing.conformance import check_market, check_market_runs
+from recomps.testing.conformance import check_market, check_market_runs
 from datetime import date
 
 def test_conforms():

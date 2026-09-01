@@ -12,8 +12,8 @@ from datetime import date
 
 import pytest
 
-from lotcomps.adapters.cache import CacheEntry, PageCache
-from lotcomps.adapters.embedded import (
+from recomps.adapters.cache import CacheEntry, PageCache
+from recomps.adapters.embedded import (
     EmbeddedSpec,
     as_money,
     as_sqft,
@@ -22,11 +22,11 @@ from lotcomps.adapters.embedded import (
     extract_records,
     find_embedded_json,
 )
-from lotcomps.adapters.fetch import PoliteFetcher
-from lotcomps.adapters.geocode import street_matches, street_tokens
-from lotcomps.adapters.html import looks_like_a_block_page, reduce_html
-from lotcomps.model.comp import SoldComp
-from lotcomps.research.verify import (
+from recomps.adapters.fetch import PoliteFetcher
+from recomps.adapters.geocode import street_matches, street_tokens
+from recomps.adapters.html import looks_like_a_block_page, reduce_html
+from recomps.model.comp import SoldComp
+from recomps.research.verify import (
     Claim,
     apply_claims,
     clean_name,
@@ -268,7 +268,7 @@ def test_a_corrupt_cache_entry_is_a_miss_not_a_crash(tmp_path):
 
 def test_the_user_agent_names_the_tool(tmp_path):
     fetcher = PoliteFetcher(PageCache(tmp_path / "c"))
-    assert "LotComps" in fetcher.user_agent
+    assert "REComps" in fetcher.user_agent
     assert "Mozilla" not in fetcher.user_agent, "never pretend to be a browser"
 
 
@@ -436,7 +436,7 @@ def test_street_comparison_ignores_type_and_direction_but_not_name():
 
 
 def test_budget_stops_a_run_before_it_overspends():
-    from lotcomps.research.llm import Budget, BudgetExhausted, Usage
+    from recomps.research.llm import Budget, BudgetExhausted, Usage
 
     budget = Budget(total=2)
     budget.spent = Usage(calls=2)
@@ -445,7 +445,7 @@ def test_budget_stops_a_run_before_it_overspends():
 
 
 def test_cost_is_estimated_from_real_usage():
-    from lotcomps.research.llm import Usage
+    from recomps.research.llm import Usage
 
     usage = Usage(calls=1, input_tokens=1_000_000, output_tokens=100_000)
     assert usage.cost_usd("claude-opus-5") == pytest.approx(5.00 + 2.50)
@@ -454,7 +454,7 @@ def test_cost_is_estimated_from_real_usage():
 
 def test_the_extraction_schema_allows_every_field_to_be_absent():
     """A page that does not name an agent has told us something true."""
-    from lotcomps.research.llm import PropertyPageFacts
+    from recomps.research.llm import PropertyPageFacts
 
     facts = PropertyPageFacts()
     assert facts.listing_agent is None
@@ -493,7 +493,7 @@ def test_a_genuinely_different_sale_is_still_flagged():
 
 
 def test_trimming_keeps_the_lines_that_carry_facts():
-    from lotcomps.adapters.html import focus_text
+    from recomps.adapters.html import focus_text
 
     page = (
         "Address and headline. " + ("navigation filler. " * 400)
@@ -513,14 +513,14 @@ def test_trimming_keeps_the_lines_that_carry_facts():
 
 def test_trimming_marks_where_it_cut():
     """A reader must not infer across a gap it cannot see."""
-    from lotcomps.adapters.html import focus_text
+    from recomps.adapters.html import focus_text
 
     page = "Listed by X. " + ("filler " * 5000) + "Price history here."
     assert "[...]" in focus_text(page, max_chars=2000)
 
 
 def test_a_short_page_is_left_alone():
-    from lotcomps.adapters.html import focus_text
+    from recomps.adapters.html import focus_text
 
     page = "Listed by A. Example with Example Realty."
     assert focus_text(page) == page

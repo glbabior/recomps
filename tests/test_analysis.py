@@ -10,22 +10,22 @@ from datetime import date
 
 import pytest
 
-from lotcomps.config.profile import (
+from recomps.config.profile import (
     Denominator,
     PropertyType,
     Subject,
     improved_profile,
     vacant_land_profile,
 )
-from lotcomps.model.address import AddressKey, normalize_address
-from lotcomps.model.comp import ActiveListing, Quadrant, SoldComp, acres_to_sqft
-from lotcomps.pipeline import quadrants as quad
-from lotcomps.pipeline.agents import analyze as analyze_agents
-from lotcomps.pipeline.agents import brokerage_family
-from lotcomps.pipeline.exclusions import apply_filters, in_core_view
-from lotcomps.pipeline.stats import sold_stats, sold_to_ask
-from lotcomps.pipeline.valuation import similar_size_comps, value_subject
-from lotcomps.plugin.market import MarketGeometry, Waypoint
+from recomps.model.address import AddressKey, normalize_address
+from recomps.model.comp import ActiveListing, Quadrant, SoldComp, acres_to_sqft
+from recomps.pipeline import quadrants as quad
+from recomps.pipeline.agents import analyze as analyze_agents
+from recomps.pipeline.agents import brokerage_family
+from recomps.pipeline.exclusions import apply_filters, in_core_view
+from recomps.pipeline.stats import sold_stats, sold_to_ask
+from recomps.pipeline.valuation import similar_size_comps, value_subject
+from recomps.plugin.market import MarketGeometry, Waypoint
 
 # ---------------------------------------------------------------------------
 # Address identity
@@ -353,7 +353,7 @@ def test_profile_without_a_subject_size_is_unusable():
 
 
 def test_profile_round_trips_through_a_dict():
-    from lotcomps.config.profile import CompProfile
+    from recomps.config.profile import CompProfile
 
     profile = improved_profile("sfr-3bd")
     profile.subject = Subject(living_sqft=1650, beds=3)
@@ -410,7 +410,7 @@ def test_ungeocoded_parcels_are_reported_not_hidden():
 def test_a_lot_suffix_is_an_artifact_not_an_identity():
     """MLS appends a lot number to parcel addresses; the same sale appears
     both with and without it, sometimes as two rows on one page."""
-    from lotcomps.config.profile import Identification
+    from recomps.config.profile import Identification
 
     land = Identification(unit_suffix_is_significant=False)
     bare = SoldComp(address="607 Larkspur St")
@@ -419,7 +419,7 @@ def test_a_lot_suffix_is_an_artifact_not_an_identity():
 
 
 def test_a_condo_unit_is_an_identity_not_an_artifact():
-    from lotcomps.config.profile import Identification
+    from recomps.config.profile import Identification
 
     condo = Identification(unit_suffix_is_significant=True)
     two = SoldComp(address="410 Bellweather Rd #2")

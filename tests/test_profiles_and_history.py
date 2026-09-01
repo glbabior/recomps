@@ -11,8 +11,8 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
-from lotcomps.config.profile import Subject, vacant_land_profile
-from lotcomps.config.store import (
+from recomps.config.profile import Subject, vacant_land_profile
+from recomps.config.store import (
     APP_DIR_ENV,
     available_profiles,
     delete_user_profile,
@@ -22,13 +22,13 @@ from lotcomps.config.store import (
     resolve_profile,
     save_user_profile,
 )
-from lotcomps.markets.demoville import MARKET
-from lotcomps.model.snapshot import Snapshot, build_snapshot
-from lotcomps.pipeline import reopen as reopen_mod
-from lotcomps.pipeline.run import run_pipeline
-from lotcomps.reporting import history as history_mod
-from lotcomps.research.fixture import FixtureResearcher
-from lotcomps.workbook.builder import build_workbook
+from recomps.markets.demoville import MARKET
+from recomps.model.snapshot import Snapshot, build_snapshot
+from recomps.pipeline import reopen as reopen_mod
+from recomps.pipeline.run import run_pipeline
+from recomps.reporting import history as history_mod
+from recomps.research.fixture import FixtureResearcher
+from recomps.workbook.builder import build_workbook
 
 AS_OF = date(2026, 8, 31)
 
@@ -221,7 +221,7 @@ def test_a_regenerated_workbook_is_valid(result, tmp_path):
 
 
 def test_reopening_with_a_different_subject_size_moves_the_valuation(result):
-    from lotcomps.config.profile import CompProfile
+    from recomps.config.profile import CompProfile
 
     bigger = CompProfile.from_dict(result.profile.to_dict())
     bigger.subject.lot_sqft = 9000.0

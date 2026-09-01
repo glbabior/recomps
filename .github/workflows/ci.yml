@@ -54,9 +54,9 @@ jobs:
       - name: Install
         run: uv pip install --system -e .
       - name: Run Demoville
-        run: lotcomps run --market demoville --offline --as-of 2026-08-31
+        run: recomps run --market demoville --offline --as-of 2026-08-31
       - name: Run Demoville under the experimental improved-property profile
-        run: lotcomps run --market demoville --profile demo-sfr --offline --as-of 2026-08-31
+        run: recomps run --market demoville --profile demo-sfr --offline --as-of 2026-08-31
       - name: Check the artifacts exist
         run: |
           test -s out/demoville_demo-lots_comps.xlsx

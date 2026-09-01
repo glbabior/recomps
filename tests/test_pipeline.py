@@ -11,16 +11,16 @@ from datetime import date
 import pytest
 from openpyxl import load_workbook
 
-from lotcomps.config.profile import Denominator
-from lotcomps.markets.demoville import MARKET
-from lotcomps.model.snapshot import Snapshot, build_snapshot
-from lotcomps.pipeline.run import run_pipeline
-from lotcomps.reporting import compare as compare_mod
-from lotcomps.reporting import methodology
-from lotcomps.research.fixture import FixtureResearcher
-from lotcomps.testing.conformance import check_market, check_market_runs
-from lotcomps.workbook.builder import build_workbook
-from lotcomps.workbook.schema import active_schema, sold_schema
+from recomps.config.profile import Denominator
+from recomps.markets.demoville import MARKET
+from recomps.model.snapshot import Snapshot, build_snapshot
+from recomps.pipeline.run import run_pipeline
+from recomps.reporting import compare as compare_mod
+from recomps.reporting import methodology
+from recomps.research.fixture import FixtureResearcher
+from recomps.testing.conformance import check_market, check_market_runs
+from recomps.workbook.builder import build_workbook
+from recomps.workbook.schema import active_schema, sold_schema
 
 AS_OF = date(2026, 8, 31)
 
@@ -270,7 +270,7 @@ def test_snapshot_round_trips(land_result, tmp_path):
 
 
 def test_snapshot_rejects_an_incompatible_schema(tmp_path):
-    from lotcomps.model.snapshot import SnapshotIncompatible
+    from recomps.model.snapshot import SnapshotIncompatible
 
     path = tmp_path / "old.json"
     path.write_text('{"schema_version": 0, "run": {}}', encoding="utf-8")
@@ -297,7 +297,7 @@ def test_methodology_records_what_ran(land_result):
     text = methodology.render(land_result)
     assert "not an appraisal" in text
     assert "## Sources" in text and "## Results" in text
-    assert "lotcomps run --market demoville" in text
+    assert "recomps run --market demoville" in text
     assert str(land_result.sold_stats.count) in text
 
 
@@ -323,7 +323,7 @@ def test_demoville_runs_under_the_conformance_kit():
 
 
 def test_market_path_loading_round_trips(tmp_path):
-    from lotcomps.plugin.loader import load_market_from_path
+    from recomps.plugin.loader import load_market_from_path
 
     (tmp_path / "fixtures").mkdir()
     (tmp_path / "fixtures" / "sold.json").write_text("[]", encoding="utf-8")
@@ -364,7 +364,7 @@ adapter = "fixture"
 
 
 def test_invalid_market_directory_is_rejected(tmp_path):
-    from lotcomps.plugin.loader import MarketInvalid, load_market_from_path
+    from recomps.plugin.loader import MarketInvalid, load_market_from_path
 
     (tmp_path / "market.toml").write_text("[market]\ndescription = 'no name'\n", encoding="utf-8")
     with pytest.raises((MarketInvalid, ValueError)):

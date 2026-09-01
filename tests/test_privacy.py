@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src" / "lotcomps"
+SRC = ROOT / "src" / "recomps"
 
 #: Demoville sits in empty farmland well away from any real market this project
 #: has touched. Any coordinate outside this box is a leak, not a fixture.
@@ -106,7 +106,7 @@ def test_engine_names_no_listing_portal():
 
 
 def test_bundled_market_declares_itself_synthetic():
-    from lotcomps.markets.demoville import MARKET
+    from recomps.markets.demoville import MARKET
 
     assert MARKET.metadata().get("synthetic") is True
     for profile in MARKET.profiles().values():

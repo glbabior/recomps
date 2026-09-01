@@ -1,10 +1,16 @@
-# LotComps
+# REComps
 
 **An LLM-orchestrated research pipeline that prices a property against its comparable sales, and writes the answer as a spreadsheet you can argue with.**
 
 ```bash
-pip install -e .
-lotcomps run --market demoville --offline
+pip install -e ".[ui]"
+recomps ui
+```
+
+Or from the command line:
+
+```bash
+recomps run --market demoville --offline
 ```
 
 That command runs the entire pipeline — collection, exclusion, statistics, valuation, pricing strategy, geographic classification, agent analysis — against a synthetic market bundled with the engine, and writes a five-sheet Excel workbook, a JSON snapshot, and a methodology document. No API key. No network. No scraping.
@@ -17,7 +23,7 @@ In January 2026 the Eaton Fire burned through Altadena, California. What is left
 
 Pricing a burned lot is genuinely hard. There is no established price-per-square-foot for a vacant parcel in a neighborhood that was fully built out a year ago. The comparable sales are recent, thin, and scattered across aggregator sites that disagree with each other. And the usual shortcut — take the market's median $/sqft and multiply — is wrong in a specific, expensive way: **smaller parcels sell at a higher rate per square foot than larger ones**, so a market-wide figure systematically understates a small lot.
 
-This project began as a research process run by hand, three times, with an AI assistant. It worked. It also took hours each time and lived entirely in one person's head. LotComps is that process turned into software.
+This project began as a research process run by hand, three times, with an AI assistant. It worked. It also took hours each time and lived entirely in one person's head. REComps is that process turned into software.
 
 ## What it produces
 
@@ -131,7 +137,7 @@ That indirection is the difference between a profile layer that parameterizes th
 Build one interactively:
 
 ```bash
-lotcomps profiles new --market demoville
+recomps profiles new --market demoville
 ```
 
 ## Saved searches and saved runs
@@ -146,19 +152,19 @@ data/runs/<market>__<profile>/<timestamp>/
 ```
 
 ```bash
-lotcomps profiles                    # what searches are saved, and how often each has run
-lotcomps profiles show empty-lots    # what exactly this one asks for
-lotcomps profiles new --from empty-lots   # a variation on an existing search
-lotcomps history                     # every run, newest first
-lotcomps run --compare last          # what moved since the previous run of this profile
+recomps profiles                    # what searches are saved, and how often each has run
+recomps profiles show empty-lots    # what exactly this one asks for
+recomps profiles new --from empty-lots   # a variation on an existing search
+recomps history                     # every run, newest first
+recomps run --compare last          # what moved since the previous run of this profile
 ```
 
 A saved run can be **reopened**, which is more than reading its numbers back. The archive keeps the rows the run collected, so the analysis can be run over them again — to reprint the workbook months later, or to ask a different question of the same sales without going back to any website:
 
 ```bash
-lotcomps render --run 2026-08-04                     # reprint that day's workbook
-lotcomps render --run last --subject-size 7500       # what if my lot were bigger
-lotcomps render --run last --exclude "12 Example St" # drop a comp you disagree with
+recomps render --run 2026-08-04                     # reprint that day's workbook
+recomps render --run last --subject-size 7500       # what if my lot were bigger
+recomps render --run last --exclude "12 Example St" # drop a comp you disagree with
 ```
 
 Reopening deliberately re-runs the analysis rather than restoring the saved figures. Restoring them would let a saved run and a fresh one disagree about what the same numbers mean; recomputing cannot. It also uses the profile *as it was at the time of the run*, so editing a profile later does not change what a past run meant.
@@ -182,8 +188,8 @@ class Market(Protocol):
 Two ways to supply one, both resolving to the same protocol:
 
 ```bash
-lotcomps run --market demoville --offline          # installed, via entry point
-lotcomps run --market-path ../my-market --offline   # a directory with market.toml
+recomps run --market demoville --offline          # installed, via entry point
+recomps run --market-path ../my-market --offline   # a directory with market.toml
 ```
 
 The directory route exists because the interesting markets are private. A real market plugin holds real addresses, real sale prices and a real subject property; it lives in its own repository, is never published, and is used straight from a sibling clone with nothing installed.
@@ -191,7 +197,7 @@ The directory route exists because the interesting markets are private. A real m
 Verify a plugin against the interface with the conformance kit the engine ships:
 
 ```python
-from lotcomps.testing.conformance import check_market
+from recomps.testing.conformance import check_market
 
 def test_my_market():
     assert not check_market(MY_MARKET).problems
@@ -212,23 +218,25 @@ They are shaped to break things rather than to look realistic: a parcel over the
 
 ## Interfaces
 
-The command line is the engine's first interface, not its only intended one. Every operation above — listing profiles, editing one, running a search, browsing run history, reopening a past run, regenerating its workbook — is a plain Python call that the command line merely wraps. A graphical interface is planned as the primary way to use this, and it drives the same calls.
+`recomps ui` opens a browser interface; everything else is `recomps <command>`. Neither is a subset of the other: every operation — listing and editing saved searches, running, browsing past runs, reopening one, regenerating its workbook — is a plain Python call that both merely wrap.
 
-That boundary is deliberate. The analysis hands back one result object; the workbook writer, the methodology renderer and the comparison report are each just a consumer of it. A screen, a map, or a web page is another consumer, and adding one requires nothing to be undone.
+The interface is careful about one distinction the engine makes and a screen easily hides. Opening a past run shows the figures **that run reported**, read off disk with nothing recalculated. Untick a comp you disagree with, or type a different size for your property, and it **recomputes from that run's own saved rows** — no re-fetching, the same sales. Those two states look identical on a screen and mean different things, so every view says in words which one you are looking at.
+
+It is also explicit about who pays before a run starts, since the reading is charged either to a Claude subscription or to a metered API account.
 
 ## Development
 
 ```bash
 uv venv --python 3.13 && uv pip install -e ".[dev]"
 pytest
-lotcomps run --market demoville --offline --as-of 2026-08-31
+recomps run --market demoville --offline --as-of 2026-08-31
 ```
 
 Live research needs the optional extra:
 
 ```bash
 uv pip install -e ".[dev,live]"
-lotcomps run --market-path ../my-market --live
+recomps run --market-path ../my-market --live
 ```
 
 **Who pays for the page reading is a choice.** `--via subscription` (the

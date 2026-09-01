@@ -23,10 +23,10 @@ from datetime import date
 import pytest
 from openpyxl import load_workbook
 
-from lotcomps.markets.demoville import MARKET
-from lotcomps.pipeline.run import run_pipeline
-from lotcomps.research.fixture import FixtureResearcher
-from lotcomps.workbook.builder import build_workbook
+from recomps.markets.demoville import MARKET
+from recomps.pipeline.run import run_pipeline
+from recomps.research.fixture import FixtureResearcher
+from recomps.workbook.builder import build_workbook
 
 AS_OF = date(2026, 8, 31)
 ERROR_VALUES = {"#REF!", "#VALUE!", "#DIV/0!", "#NAME?", "#N/A", "#NULL!", "#NUM!"}
