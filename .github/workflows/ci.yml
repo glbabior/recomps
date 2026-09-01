@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: tests (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install
+        run: uv pip install --system -e ".[dev]"
+      - name: Lint
+        run: ruff check src tests
+      - name: Test
+        run: pytest -q
+
+  workbook-recalculates:
+    # The strong output check: a real spreadsheet engine computes every formula
+    # in the generated workbook and no cell comes back an error. Runs once,
+    # because it is slow and does not vary by interpreter.
+    name: workbook recalculates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install LibreOffice
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-calc
+      - name: Install
+        run: uv pip install --system -e ".[dev]"
+      - name: Recalculate
+        run: pytest tests/test_recalc.py -q
+
+  offline-run:
+    # The clean-clone promise from the README: no key, no network, a workbook.
+    name: offline demo run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install
+        run: uv pip install --system -e .
+      - name: Run Demoville
+        run: lotcomps run --market demoville --offline --as-of 2026-08-31
+      - name: Run Demoville under the experimental improved-property profile
+        run: lotcomps run --market demoville --profile demo-sfr --offline --as-of 2026-08-31
+      - name: Check the artifacts exist
+        run: |
+          test -s out/demoville_demo-lots_comps.xlsx
+          test -s out/demoville_demo-lots_methodology.md
+          test -s out/demoville_demo-sfr_comps.xlsx
+
+  privacy:
+    # No real data may reach this repository. The checks here are structural,
+    # because a denylist of real strings would itself be the leak; the
+    # complementary denylist scan lives in the private market plugin.
+    name: privacy scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install
+        run: uv pip install --system -e ".[dev]"
+      - name: Structural privacy tests
+        run: pytest tests/test_privacy.py -q
+      - name: No recorded datasets or run output committed
+        run: |
+          set -e
+          if git ls-files | grep -Ei '\.(xlsx|xls|csv)$'; then
+            echo "::error::spreadsheet or CSV data is committed; recorded data belongs in a private plugin"
+            exit 1
+          fi
+          if git ls-files | grep -E 'snapshot\.json$'; then
+            echo "::error::a run snapshot is committed; snapshots hold every row of a run"
+            exit 1
+          fi
+      - name: No listing-portal hostnames in the engine
+        run: |
+          set -e
+          if git ls-files 'src/**' | xargs grep -lEi 'zillow|redfin|trulia|movoto|homes\.com|realtor\.com|compass\.com|crmls'; then
+            echo "::error::site-specific code belongs in a private market plugin, not the engine"
+            exit 1
+          fi

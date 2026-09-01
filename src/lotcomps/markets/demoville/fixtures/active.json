@@ -1,0 +1,245 @@
+[
+  {
+    "address": "2668 Quarry Rd",
+    "list_price": 670000.0,
+    "lot_sqft": 10454,
+    "brokerage": "Prairie & Co Realty",
+    "agent": "A. Okonkwo",
+    "lat": 40.02409,
+    "lon": -100.0341,
+    "sources": [
+      "fixture://demoville/active"
+    ]
+  },
+  {
+    "address": "693 Kestrel Ln",
+    "list_price": 836000.0,
+    "lot_sqft": 21780,
+    "brokerage": "Northline Properties",
+    "agent": "E. Nakamura",
+    "lat": 40.00352,
+    "lon": -99.97789,
+    "sources": [
+      "fixture://demoville/active"
+    ]
+  },
+  {
+    "address": "2689 Chandler St",
+    "list_price": 699000.0,
+    "lot_sqft": 6534,
+    "brokerage": "Prairie & Co Realty",
+    "agent": "C. Marchetti",
+    "lat": 39.99897,
+    "lon": -100.01471,
+    "sources": [
+      "fixture://demoville/active"
+    ]
+  },
+  {
+    "address": "2786 Chandler St",
+    "list_price": 522000.0,
+    "lot_sqft": 5227,
+    "brokerage": "Demoville Realty Group",
+    "agent": "F. Castellanos",
+    "lat": 40.00956,
+    "lon": -99.9607,
+    "sources": [
+      "fixture://demoville/active"
+    ]
+  },
+  {
+    "address": "3740 Pikestaff Ln",
+    "list_price": 735000.0,
+    "lot_sqft": 13068,
+    "brokerage": "Meridian Land Partners",
+    "agent": "B. Lindqvist",
+    "lat": 40.00062,
+    "lon": -99.99168,
+    "sources": [
+      "fixture://demoville/active"
+    ]
+  },
+  {
+    "address": "700 Chandler St",
+    "list_price": 396000.0,
+    "lot_sqft": 4356,
+    "brokerage": "Prairie & Co Realty",
+    "agent": "J. Whitfield",
+    "lat": 40.00816,
+    "lon": -100.04207,
+    "sources": [
+      "fixture://demoville/active"
+    ]
+  },
+  {
+    "address": "3738 Larkspur Way",
+    "list_price": 418000.0,
+    "lot_sqft": 4356,
+    "brokerage": "Meridian Land Partners",
+    "agent": "E. Nakamura",
+    "lat": 40.00662,
+    "lon": -100.04345,
+    "sources": [
+      "fixture://demoville/active"
+    ]
+  },
+  {
+    "address": "1959 Kestrel Ln",
+    "list_price": 556000.0,
+    "lot_sqft": 6534,
+    "brokerage": "Cornerpost Real Estate",
+    "agent": "G. Abernathy",
+    "lat": 40.03194,
+    "lon": -99.9705,
+    "sources": [
+      "fixture://demoville/active"
+    ]
+  },
+  {
+    "address": "1944 Foundry St",
+    "list_price": 828000.0,
+    "lot_sqft": 13068,
+    "brokerage": "Demoville Realty Group",
+    "agent": "H. Delacroix",
+    "lat": 40.02402,
+    "lon": -99.97696,
+    "sources": [
+      "fixture://demoville/active"
+    ]
+  },
+  {
+    "address": "3450 Foundry St",
+    "list_price": 654000.0,
+    "lot_sqft": 8276,
+    "brokerage": "Meridian Land Partners",
+    "agent": "H. Delacroix",
+    "lat": 40.00882,
+    "lon": -99.97372,
+    "sources": [
+      "fixture://demoville/active"
+    ]
+  },
+  {
+    "address": "1453 Chandler St",
+    "list_price": 722000.0,
+    "lot_sqft": 21780,
+    "brokerage": "Demoville Realty Group",
+    "agent": "B. Lindqvist",
+    "lat": 40.02164,
+    "lon": -99.97606,
+    "sources": [
+      "fixture://demoville/active"
+    ]
+  },
+  {
+    "address": "3433 Pikestaff Ln",
+    "list_price": 799000.0,
+    "lot_sqft": 8276,
+    "brokerage": "Demoville Realty Group",
+    "agent": "A. Okonkwo",
+    "lat": 40.03458,
+    "lon": -100.02266,
+    "sources": [
+      "fixture://demoville/active"
+    ]
+  },
+  {
+    "address": "2713 Larkspur Way",
+    "list_price": 579000.0,
+    "lot_sqft": 8276,
+    "brokerage": "Meridian Land Partners",
+    "agent": "H. Delacroix",
+    "lat": 40.02853,
+    "lon": -99.95454,
+    "sources": [
+      "fixture://demoville/active"
+    ]
+  },
+  {
+    "address": "1075 Foundry St",
+    "list_price": 923000.0,
+    "lot_sqft": 21780,
+    "brokerage": "Harbor Stone Realty",
+    "agent": "E. Nakamura",
+    "lat": 39.99827,
+    "lon": -99.97012,
+    "sources": [
+      "fixture://demoville/active"
+    ]
+  },
+  {
+    "address": "1973 Thistle Ct",
+    "list_price": 547000.0,
+    "lot_sqft": 7405,
+    "brokerage": "Meridian Land Partners",
+    "agent": "D. Yamamoto",
+    "lat": 40.02751,
+    "lon": -99.96753,
+    "sources": [
+      "fixture://demoville/active"
+    ]
+  },
+  {
+    "address": "2655 Larkspur Way",
+    "list_price": 776000.0,
+    "lot_sqft": 8276,
+    "brokerage": "Prairie & Co Realty",
+    "agent": "A. Okonkwo",
+    "lat": 40.02066,
+    "lon": -100.03424,
+    "sources": [
+      "fixture://demoville/active"
+    ]
+  },
+  {
+    "address": "1787 Foundry St",
+    "list_price": 958000.0,
+    "lot_sqft": 21780,
+    "brokerage": "Demoville Realty Group",
+    "agent": "E. Nakamura",
+    "lat": 39.99957,
+    "lon": -99.94766,
+    "sources": [
+      "fixture://demoville/active"
+    ]
+  },
+  {
+    "address": "509 Bellweather Rd",
+    "list_price": 712000.0,
+    "lot_sqft": 7405,
+    "brokerage": "Demoville Realty Group",
+    "agent": "D. Yamamoto",
+    "lat": 39.99727,
+    "lon": -100.04835,
+    "sources": [
+      "fixture://demoville/active"
+    ]
+  },
+  {
+    "address": "1408 Larkspur Way",
+    "list_price": 633000.0,
+    "lot_sqft": 8276,
+    "brokerage": "Meridian Land Partners",
+    "agent": "H. Delacroix",
+    "lat": 40.02405,
+    "lon": -100.03483,
+    "sources": [
+      "fixture://demoville/active"
+    ],
+    "notes": [
+      "Index still lists this as active; it closed."
+    ]
+  },
+  {
+    "address": "9100 Quarry Rd",
+    "list_price": 1250000,
+    "lot_sqft": 217800,
+    "brokerage": "Meridian Land Partners",
+    "agent": "G. Abernathy",
+    "lat": 40.02096,
+    "lon": -99.96977,
+    "sources": [
+      "fixture://demoville/active"
+    ]
+  }
+]

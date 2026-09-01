@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+out/
+runs/
+*.xlsx
+!src/lotcomps/markets/demoville/**/*.xlsx
+!tests/golden/**/*.xlsx
+.env
+
+# Run output, never source
+src/lotcomps/markets/*/data/

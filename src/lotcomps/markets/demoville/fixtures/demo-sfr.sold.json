@@ -1,0 +1,230 @@
+[
+  {
+    "address": "2831 Quarry Rd",
+    "living_sqft": 1520,
+    "lot_sqft": 6080,
+    "beds": 2,
+    "baths": 2,
+    "year_built": 1948,
+    "brokerage": "Meridian Land Partners",
+    "agent": "G. Abernathy",
+    "lat": 40.0334,
+    "lon": -99.96786,
+    "sources": [
+      "fixture://demoville/sfr"
+    ],
+    "sold_date": "2026-06-17",
+    "sold_price": 776000.0,
+    "final_list_price": 807000.0,
+    "original_list_price": 807000.0
+  },
+  {
+    "address": "3017 Larkspur Way",
+    "living_sqft": 2380,
+    "lot_sqft": 11900,
+    "beds": 3,
+    "baths": 2,
+    "year_built": 2006,
+    "brokerage": "Cornerpost Real Estate",
+    "agent": "E. Nakamura",
+    "lat": 40.02014,
+    "lon": -100.01552,
+    "sources": [
+      "fixture://demoville/sfr"
+    ],
+    "sold_date": "2026-06-11",
+    "sold_price": 980000.0,
+    "final_list_price": 980000.0,
+    "original_list_price": 980000.0
+  },
+  {
+    "address": "2038 Bellweather Rd",
+    "living_sqft": 1340,
+    "lot_sqft": 5360,
+    "beds": 4,
+    "baths": 1,
+    "year_built": 1994,
+    "brokerage": "Northline Properties",
+    "agent": "A. Okonkwo",
+    "lat": 40.01258,
+    "lon": -100.05317,
+    "sources": [
+      "fixture://demoville/sfr"
+    ],
+    "sold_date": "2026-07-07",
+    "sold_price": 661000.0,
+    "final_list_price": 635000.0,
+    "original_list_price": 635000.0
+  },
+  {
+    "address": "1624 Bellweather Rd",
+    "living_sqft": 1520,
+    "lot_sqft": 7600,
+    "beds": 2,
+    "baths": 1,
+    "year_built": 2021,
+    "brokerage": "Meridian Land Partners",
+    "agent": "E. Nakamura",
+    "lat": 40.02152,
+    "lon": -99.97958,
+    "sources": [
+      "fixture://demoville/sfr"
+    ],
+    "sold_date": "2026-07-05",
+    "sold_price": 812000.0,
+    "final_list_price": 812000.0,
+    "original_list_price": 812000.0
+  },
+  {
+    "address": "2514 Kestrel Ln",
+    "living_sqft": 2100,
+    "lot_sqft": 8400,
+    "beds": 2,
+    "baths": 1,
+    "year_built": 1978,
+    "brokerage": "Demoville Realty Group",
+    "agent": "A. Okonkwo",
+    "lat": 40.00864,
+    "lon": -99.96897,
+    "sources": [
+      "fixture://demoville/sfr"
+    ],
+    "sold_date": "2026-06-13",
+    "sold_price": 1021000.0,
+    "final_list_price": 1062000.0,
+    "original_list_price": 1062000.0
+  },
+  {
+    "address": "2983 Bellweather Rd",
+    "living_sqft": 1680,
+    "lot_sqft": 6720,
+    "beds": 3,
+    "baths": 2,
+    "year_built": 1957,
+    "brokerage": "Demoville Realty Group",
+    "agent": "G. Abernathy",
+    "lat": 40.00826,
+    "lon": -100.05352,
+    "sources": [
+      "fixture://demoville/sfr"
+    ],
+    "sold_date": "2026-08-26",
+    "sold_price": 896000.0,
+    "final_list_price": 896000.0,
+    "original_list_price": 896000.0
+  },
+  {
+    "address": "203 Quarry Rd",
+    "living_sqft": 2100,
+    "lot_sqft": 8400,
+    "beds": 2,
+    "baths": 3,
+    "year_built": 1963,
+    "brokerage": "Cornerpost Real Estate",
+    "agent": "A. Okonkwo",
+    "lat": 40.02089,
+    "lon": -99.9593,
+    "sources": [
+      "fixture://demoville/sfr"
+    ],
+    "sold_date": "2026-08-09",
+    "sold_price": 1045000.0,
+    "final_list_price": 1003000.0,
+    "original_list_price": 1003000.0
+  },
+  {
+    "address": "3154 Bellweather Rd",
+    "living_sqft": 2100,
+    "lot_sqft": 6300,
+    "beds": 4,
+    "baths": 2,
+    "year_built": 1978,
+    "brokerage": "Harbor Stone Realty",
+    "agent": "H. Delacroix",
+    "lat": 40.02551,
+    "lon": -99.96358,
+    "sources": [
+      "fixture://demoville/sfr"
+    ],
+    "sold_date": "2026-08-14",
+    "sold_price": 952000.0,
+    "final_list_price": 952000.0,
+    "original_list_price": 952000.0
+  },
+  {
+    "address": "532 Bellweather Rd",
+    "living_sqft": 1680,
+    "lot_sqft": 6720,
+    "beds": 3,
+    "baths": 3,
+    "year_built": 1963,
+    "brokerage": "Harbor Stone Realty",
+    "agent": "E. Nakamura",
+    "lat": 40.03251,
+    "lon": -99.98413,
+    "sources": [
+      "fixture://demoville/sfr"
+    ],
+    "sold_date": "2026-07-23",
+    "sold_price": 862000.0,
+    "final_list_price": 862000.0,
+    "original_list_price": 862000.0
+  },
+  {
+    "address": "3175 Meadowlark Ave",
+    "living_sqft": 1180,
+    "lot_sqft": 4720,
+    "beds": 2,
+    "baths": 1,
+    "year_built": 2021,
+    "brokerage": "Demoville Realty Group",
+    "agent": "E. Nakamura",
+    "lat": 39.99752,
+    "lon": -99.96458,
+    "sources": [
+      "fixture://demoville/sfr"
+    ],
+    "sold_date": "2026-08-06",
+    "sold_price": 665000.0,
+    "final_list_price": 638000.0,
+    "original_list_price": 638000.0
+  },
+  {
+    "address": "3091 Ironwood Dr",
+    "living_sqft": 1340,
+    "lot_sqft": 4020,
+    "beds": 2,
+    "baths": 2,
+    "year_built": 1963,
+    "brokerage": "Demoville Realty Group",
+    "agent": "E. Nakamura",
+    "lat": 40.02622,
+    "lon": -100.01542,
+    "sources": [
+      "fixture://demoville/sfr"
+    ],
+    "sold_date": "2026-08-01",
+    "sold_price": 709000.0,
+    "final_list_price": 737000.0,
+    "original_list_price": 737000.0
+  },
+  {
+    "address": "2603 Pikestaff Ln",
+    "living_sqft": 2100,
+    "lot_sqft": 6300,
+    "beds": 3,
+    "baths": 2,
+    "year_built": 1994,
+    "brokerage": "Cornerpost Real Estate",
+    "agent": "G. Abernathy",
+    "lat": 40.02932,
+    "lon": -100.04219,
+    "sources": [
+      "fixture://demoville/sfr"
+    ],
+    "sold_date": "2026-07-03",
+    "sold_price": 968000.0,
+    "final_list_price": 1007000.0,
+    "original_list_price": 1007000.0
+  }
+]

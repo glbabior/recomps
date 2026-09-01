@@ -1,0 +1,114 @@
+[
+  {
+    "address": "662 Larkspur Way",
+    "living_sqft": 2100,
+    "lot_sqft": 6300,
+    "beds": 3,
+    "baths": 2,
+    "year_built": 1957,
+    "brokerage": "Prairie & Co Realty",
+    "agent": "D. Yamamoto",
+    "lat": 40.03536,
+    "lon": -100.04163,
+    "sources": [
+      "fixture://demoville/sfr"
+    ],
+    "list_price": 911000.0
+  },
+  {
+    "address": "3792 Thistle Ct",
+    "living_sqft": 1840,
+    "lot_sqft": 9200,
+    "beds": 3,
+    "baths": 2,
+    "year_built": 1994,
+    "brokerage": "Prairie & Co Realty",
+    "agent": "F. Castellanos",
+    "lat": 40.02095,
+    "lon": -100.01795,
+    "sources": [
+      "fixture://demoville/sfr"
+    ],
+    "list_price": 867000.0
+  },
+  {
+    "address": "1525 Quarry Rd",
+    "living_sqft": 2100,
+    "lot_sqft": 8400,
+    "beds": 4,
+    "baths": 2.5,
+    "year_built": 2021,
+    "brokerage": "Demoville Realty Group",
+    "agent": "J. Whitfield",
+    "lat": 40.00371,
+    "lon": -100.03882,
+    "sources": [
+      "fixture://demoville/sfr"
+    ],
+    "list_price": 931000.0
+  },
+  {
+    "address": "2932 Larkspur Way",
+    "living_sqft": 1680,
+    "lot_sqft": 6720,
+    "beds": 3,
+    "baths": 2,
+    "year_built": 1963,
+    "brokerage": "Harbor Stone Realty",
+    "agent": "G. Abernathy",
+    "lat": 40.01874,
+    "lon": -99.95626,
+    "sources": [
+      "fixture://demoville/sfr"
+    ],
+    "list_price": 887000.0
+  },
+  {
+    "address": "372 Foundry St",
+    "living_sqft": 1840,
+    "lot_sqft": 7360,
+    "beds": 4,
+    "baths": 1,
+    "year_built": 2006,
+    "brokerage": "Demoville Realty Group",
+    "agent": "C. Marchetti",
+    "lat": 40.02872,
+    "lon": -100.04999,
+    "sources": [
+      "fixture://demoville/sfr"
+    ],
+    "list_price": 964000.0
+  },
+  {
+    "address": "3230 Bellweather Rd",
+    "living_sqft": 1680,
+    "lot_sqft": 6720,
+    "beds": 2,
+    "baths": 2,
+    "year_built": 1978,
+    "brokerage": "Harbor Stone Realty",
+    "agent": "E. Nakamura",
+    "lat": 39.99512,
+    "lon": -99.97214,
+    "sources": [
+      "fixture://demoville/sfr"
+    ],
+    "list_price": 899000.0
+  },
+  {
+    "address": "1047 Ironwood Dr",
+    "living_sqft": 2100,
+    "lot_sqft": 10500,
+    "beds": 4,
+    "baths": 2,
+    "year_built": 2006,
+    "brokerage": "Cornerpost Real Estate",
+    "agent": "J. Whitfield",
+    "lat": 40.00581,
+    "lon": -100.04824,
+    "sources": [
+      "fixture://demoville/sfr"
+    ],
+    "list_price": 952000.0
+  }
+]

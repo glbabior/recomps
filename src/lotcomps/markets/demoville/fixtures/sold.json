@@ -1,0 +1,516 @@
+[
+  {
+    "address": "1408 Larkspur Way",
+    "sold_date": "2026-08-24",
+    "sold_price": 633000.0,
+    "lot_sqft": 8276,
+    "brokerage": "Meridian Land Partners",
+    "agent": "H. Delacroix",
+    "final_list_price": 633000.0,
+    "original_list_price": 633000.0,
+    "lat": 40.02405,
+    "lon": -100.03483,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "3768 Ironwood Dr",
+    "sold_date": "2026-07-14",
+    "sold_price": 489000.0,
+    "lot_sqft": 6098,
+    "brokerage": "Prairie & Co Realty",
+    "agent": "A. Okonkwo",
+    "final_list_price": 518000.0,
+    "original_list_price": 518000.0,
+    "lat": 40.03566,
+    "lon": -100.04855,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "3813 Larkspur Way",
+    "sold_date": "2026-07-09",
+    "sold_price": 588000.0,
+    "lot_sqft": 6534,
+    "brokerage": "Demoville Realty Group",
+    "agent": "H. Delacroix",
+    "final_list_price": 606000.0,
+    "original_list_price": 606000.0,
+    "lat": 40.00292,
+    "lon": -99.98477,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "3809 Chandler St",
+    "sold_date": "2026-06-14",
+    "sold_price": 679000.0,
+    "lot_sqft": 9148,
+    "brokerage": "Demoville Realty Group",
+    "agent": "F. Castellanos",
+    "final_list_price": 699000.0,
+    "original_list_price": 699000.0,
+    "lat": 40.02601,
+    "lon": -100.0081,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "2623 Bellweather Rd",
+    "sold_date": "2026-07-28",
+    "sold_price": 641000.0,
+    "lot_sqft": 8276,
+    "brokerage": "Meridian Land Partners",
+    "agent": "A. Okonkwo",
+    "final_list_price": 641000.0,
+    "original_list_price": 641000.0,
+    "lat": 40.02821,
+    "lon": -99.98668,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "1707 Kestrel Ln",
+    "sold_date": "2026-07-04",
+    "sold_price": 485000.0,
+    "lot_sqft": 5227,
+    "brokerage": "Prairie & Co Realty",
+    "agent": "B. Lindqvist",
+    "final_list_price": 500000.0,
+    "original_list_price": 500000.0,
+    "lat": 40.01806,
+    "lon": -100.02379,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "280 Pikestaff Ln",
+    "sold_date": "2026-07-24",
+    "sold_price": 523000.0,
+    "lot_sqft": 5663,
+    "brokerage": "Cornerpost Real Estate",
+    "agent": "F. Castellanos",
+    "final_list_price": 523000.0,
+    "original_list_price": 523000.0,
+    "lat": 40.00398,
+    "lon": -99.9724,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "2216 Thistle Ct",
+    "sold_date": "2026-08-28",
+    "sold_price": 636000.0,
+    "lot_sqft": 11326,
+    "brokerage": "Prairie & Co Realty",
+    "agent": "D. Yamamoto",
+    "final_list_price": 617000.0,
+    "original_list_price": 617000.0,
+    "lat": 40.02813,
+    "lon": -100.04952,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "729 Foundry St",
+    "sold_date": "2026-06-28",
+    "sold_price": 369000.0,
+    "lot_sqft": 3920,
+    "brokerage": "Demoville Realty Group",
+    "agent": "H. Delacroix",
+    "final_list_price": 369000.0,
+    "original_list_price": 369000.0,
+    "lat": 39.99563,
+    "lon": -100.01832,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "1277 Bellweather Rd",
+    "sold_date": "2026-08-14",
+    "sold_price": 670000.0,
+    "lot_sqft": 9148,
+    "brokerage": "Harbor Stone Realty",
+    "agent": "H. Delacroix",
+    "final_list_price": 670000.0,
+    "original_list_price": 670000.0,
+    "lat": 40.00743,
+    "lon": -99.95199,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "1035 Thistle Ct",
+    "sold_date": "2026-08-04",
+    "sold_price": 686000.0,
+    "lot_sqft": 8276,
+    "brokerage": "Harbor Stone Realty",
+    "agent": "F. Castellanos",
+    "final_list_price": 727000.0,
+    "original_list_price": 727000.0,
+    "lat": 39.99982,
+    "lon": -100.03712,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "3220 Kestrel Ln",
+    "sold_date": "2026-06-04",
+    "sold_price": 680000.0,
+    "lot_sqft": 11326,
+    "brokerage": "Harbor Stone Realty",
+    "agent": "E. Nakamura",
+    "final_list_price": 680000.0,
+    "original_list_price": 680000.0,
+    "lat": 40.0117,
+    "lon": -100.03267,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "2957 Kestrel Ln",
+    "sold_date": "2026-08-19",
+    "sold_price": 375000.0,
+    "lot_sqft": 3920,
+    "brokerage": "Meridian Land Partners",
+    "agent": "E. Nakamura",
+    "final_list_price": 352000.0,
+    "original_list_price": 352000.0,
+    "lat": 40.02266,
+    "lon": -100.02651,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "497 Foundry St",
+    "sold_date": "2026-07-19",
+    "sold_price": 490000.0,
+    "lot_sqft": 5227,
+    "brokerage": "Cornerpost Real Estate",
+    "agent": "A. Okonkwo",
+    "final_list_price": 505000.0,
+    "original_list_price": 505000.0,
+    "lat": 39.99547,
+    "lon": -100.02527,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "2613 Quarry Rd",
+    "sold_date": "2026-08-09",
+    "sold_price": 557000.0,
+    "lot_sqft": 7405,
+    "brokerage": "Harbor Stone Realty",
+    "agent": "D. Yamamoto",
+    "final_list_price": 557000.0,
+    "original_list_price": 557000.0,
+    "lat": 40.02424,
+    "lon": -99.95243,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "2460 Thistle Ct",
+    "sold_date": "2026-06-19",
+    "sold_price": 570000.0,
+    "lot_sqft": 6534,
+    "brokerage": "Northline Properties",
+    "agent": "H. Delacroix",
+    "final_list_price": 553000.0,
+    "original_list_price": 553000.0,
+    "lat": 40.03165,
+    "lon": -99.96321,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "2704 Bellweather Rd",
+    "sold_date": "2026-06-24",
+    "sold_price": 487000.0,
+    "lot_sqft": 5227,
+    "brokerage": "Demoville Realty Group",
+    "agent": "F. Castellanos",
+    "final_list_price": 487000.0,
+    "original_list_price": 487000.0,
+    "lat": 40.00741,
+    "lon": -100.03675,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "3001 Meadowlark Ave",
+    "sold_date": "2026-06-09",
+    "sold_price": 391000.0,
+    "lot_sqft": 4356,
+    "brokerage": "Harbor Stone Realty",
+    "agent": "C. Marchetti",
+    "final_list_price": 368000.0,
+    "original_list_price": 368000.0,
+    "lat": 39.99751,
+    "lon": -99.94635,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "2066 Larkspur Way",
+    "sold_date": "2026-08-24",
+    "sold_price": 411000.0,
+    "lot_sqft": 4356,
+    "brokerage": "Demoville Realty Group",
+    "agent": "F. Castellanos",
+    "final_list_price": 411000.0,
+    "original_list_price": 411000.0,
+    "lat": 40.02431,
+    "lon": -100.04456,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "570 Ironwood Dr",
+    "sold_date": "2026-07-14",
+    "sold_price": 568000.0,
+    "lot_sqft": 6534,
+    "brokerage": "Cornerpost Real Estate",
+    "agent": "G. Abernathy",
+    "final_list_price": 551000.0,
+    "original_list_price": 551000.0,
+    "lat": 40.03078,
+    "lon": -99.95409,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "121 Kestrel Ln",
+    "sold_date": "2026-07-09",
+    "sold_price": 380000.0,
+    "lot_sqft": 3920,
+    "brokerage": "Prairie & Co Realty",
+    "agent": "G. Abernathy",
+    "final_list_price": 403000.0,
+    "original_list_price": 403000.0,
+    "lat": 40.01265,
+    "lon": -100.04034,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "3303 Foundry St",
+    "sold_date": "2026-06-14",
+    "sold_price": 641000.0,
+    "lot_sqft": 9148,
+    "brokerage": "Northline Properties",
+    "agent": "B. Lindqvist",
+    "final_list_price": 641000.0,
+    "original_list_price": 641000.0,
+    "lat": 40.02446,
+    "lon": -99.98044,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "1826 Thistle Ct",
+    "sold_date": "2026-07-28",
+    "sold_price": 408000.0,
+    "lot_sqft": 4356,
+    "brokerage": "Demoville Realty Group",
+    "agent": "B. Lindqvist",
+    "final_list_price": 396000.0,
+    "original_list_price": 396000.0,
+    "lat": 39.9949,
+    "lon": -99.97451,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "3107 Meadowlark Ave",
+    "sold_date": "2026-07-04",
+    "sold_price": 363000.0,
+    "lot_sqft": 3920,
+    "brokerage": "Northline Properties",
+    "agent": "F. Castellanos",
+    "final_list_price": 385000.0,
+    "original_list_price": 385000.0,
+    "lat": 40.02015,
+    "lon": -100.01288,
+    "lot_size_is_rounded": true,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "8800 Quarry Rd",
+    "sold_date": "2026-07-02",
+    "sold_price": 690000,
+    "lot_sqft": 63000,
+    "brokerage": "Meridian Land Partners",
+    "agent": "G. Abernathy",
+    "final_list_price": 725000,
+    "original_list_price": 725000,
+    "lat": 40.03227,
+    "lon": -99.9665,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "417 Foundry St",
+    "sold_date": "2026-06-18",
+    "sold_price": 505000,
+    "lot_sqft": null,
+    "brokerage": "Prairie & Co Realty",
+    "agent": "A. Okonkwo",
+    "final_list_price": 515000,
+    "original_list_price": 515000,
+    "lat": 39.99914,
+    "lon": -100.04775,
+    "sources": [
+      "fixture://demoville/sold"
+    ],
+    "notes": [
+      "Size not published by any source."
+    ]
+  },
+  {
+    "address": "0 Bellweather Rd",
+    "sold_date": "2026-07-21",
+    "sold_price": 452000,
+    "lot_sqft": 6098,
+    "brokerage": null,
+    "agent": null,
+    "final_list_price": 449000,
+    "original_list_price": 449000,
+    "lat": 40.02583,
+    "lon": -100.02892,
+    "sources": [
+      "fixture://demoville/sold"
+    ],
+    "notes": [
+      "No attribution on any source; possibly off-market."
+    ]
+  },
+  {
+    "address": "1290 Ironwood Dr",
+    "sold_date": "2026-06-27",
+    "sold_price": 512000,
+    "lot_sqft": 7405,
+    "brokerage": "Harbor Stone Realty",
+    "agent": "H. Delacroix",
+    "final_list_price": 599000,
+    "original_list_price": 799000,
+    "lat": 40.00222,
+    "lon": -99.96114,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "612 Larkspur Way",
+    "sold_date": "2026-08-01",
+    "sold_price": 585000,
+    "lot_sqft": 5663,
+    "brokerage": "Demoville Realty Group",
+    "agent": "B. Lindqvist",
+    "final_list_price": 479000,
+    "original_list_price": 479000,
+    "lat": 40.03204,
+    "lon": -100.01155,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "88 E Chandler St",
+    "sold_date": "2026-07-09",
+    "sold_price": 468000,
+    "lot_sqft": 6098,
+    "brokerage": "Cornerpost Real Estate",
+    "agent": "C. Marchetti",
+    "final_list_price": 465000,
+    "original_list_price": 465000,
+    "lat": 40.0121,
+    "lon": -100.017,
+    "sources": [
+      "fixture://demoville/sold"
+    ],
+    "notes": [
+      "Street name says East; the parcel is west of the divider."
+    ]
+  },
+  {
+    "address": "2000 Divider Row",
+    "sold_date": "2026-07-16",
+    "sold_price": 498000,
+    "lot_sqft": 6534,
+    "brokerage": "Northline Properties",
+    "agent": "D. Yamamoto",
+    "final_list_price": 498000,
+    "original_list_price": 498000,
+    "lat": 40.014583,
+    "lon": -99.98,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  },
+  {
+    "address": "740 Thistle Ct",
+    "sold_date": "2026-08-05",
+    "sold_price": 522000,
+    "lot_sqft": 6534,
+    "brokerage": "Prairie & Co Realty",
+    "agent": "A. Okonkwo",
+    "buyer_agent": "A. Okonkwo",
+    "final_list_price": 519000,
+    "original_list_price": 519000,
+    "lat": 40.00347,
+    "lon": -100.0086,
+    "sources": [
+      "fixture://demoville/sold"
+    ]
+  }
+]
