@@ -90,10 +90,28 @@ def _interactive() -> bool:
     return sys.stdin.isatty() and sys.stdout.isatty()
 
 
-@click.group(context_settings={"help_option_names": ["-h", "--help"]})
+@click.group(
+    context_settings={"help_option_names": ["-h", "--help"]},
+    invoke_without_command=True,
+)
 @click.version_option(__version__, prog_name="recomps")
-def main() -> None:
-    """Research real-estate comps and generate a live-formula workbook."""
+@click.pass_context
+def main(ctx: click.Context) -> None:
+    """Research real-estate comps and generate a live-formula workbook.
+
+    Run with no arguments in a terminal and the graphical interface opens.
+    Everything it does is also available as a subcommand below.
+    """
+    if ctx.invoked_subcommand is not None:
+        return
+    # Bare `recomps` opens the interface, because this is a tool people use by
+    # looking at it. But only when a person is actually watching: in a pipe, a
+    # script or CI, silently starting a web server that never exits would be a
+    # trap, so those get the help text they expected.
+    if _interactive():
+        ctx.invoke(ui, market=None, market_path=None, port=8501)
+    else:
+        click.echo(ctx.get_help())
 
 
 # ---------------------------------------------------------------------------

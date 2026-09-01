@@ -183,3 +183,64 @@ def test_the_adjustment_summary_is_readable():
 def test_no_adjustments_means_nothing_to_describe():
     assert ui_state.Adjustments().describe() == ""
     assert not ui_state.Adjustments().any
+
+
+# ---------------------------------------------------------------------------
+# What a bare `recomps` does
+# ---------------------------------------------------------------------------
+
+
+def test_bare_command_opens_the_interface_for_a_person(monkeypatch):
+    """This is a tool people use by looking at it, so a bare invocation in a
+    terminal should show them something rather than a menu."""
+    from click.testing import CliRunner
+
+    from recomps import cli
+
+    launched = {}
+
+    def fake_run(command, **kwargs):
+        launched["command"] = command
+        return type("Completed", (), {"returncode": 0})()
+
+    monkeypatch.setattr(cli, "_interactive", lambda: True)
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    result = CliRunner().invoke(cli.main, [])
+    assert result.exit_code == 0, result.output
+
+    command = launched["command"]
+    assert "streamlit" in command and "run" in command
+    assert any(part.endswith("app.py") for part in command), "must point at the app"
+    port_at = command.index("--server.port")
+    assert command[port_at + 1] == "8501"
+    assert "localhost:8501" in result.output, "tell the user where to look"
+
+
+def test_bare_command_in_a_script_prints_help_instead(monkeypatch):
+    """Silently starting a web server that never exits would be a trap in CI."""
+    from click.testing import CliRunner
+
+    from recomps import cli
+
+    def explode(*args, **kwargs):
+        raise AssertionError("must not launch a server when nobody is watching")
+
+    monkeypatch.setattr(cli, "_interactive", lambda: False)
+    monkeypatch.setattr("subprocess.run", explode)
+
+    result = CliRunner().invoke(cli.main, [])
+    assert result.exit_code == 0
+    assert "Commands:" in result.output
+    assert "ui " in result.output
+
+
+def test_a_named_subcommand_still_runs_normally(monkeypatch):
+    from click.testing import CliRunner
+
+    from recomps import cli
+
+    monkeypatch.setattr(cli, "_interactive", lambda: True)
+    result = CliRunner().invoke(cli.main, ["markets"])
+    assert result.exit_code == 0
+    assert "demoville" in result.output

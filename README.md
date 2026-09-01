@@ -4,10 +4,12 @@
 
 ```bash
 pip install -e ".[ui]"
-recomps ui
+recomps
 ```
 
-Or from the command line:
+Run in a terminal with no arguments, it opens the interface. Every operation is
+also a subcommand, and in a script or CI a bare `recomps` prints its help rather
+than silently starting a server that never exits:
 
 ```bash
 recomps run --market demoville --offline
