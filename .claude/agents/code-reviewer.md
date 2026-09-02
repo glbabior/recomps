@@ -59,7 +59,7 @@ Speculative performance. Restating what a docstring already explains.
 Read the diff first (`git diff`, `git diff --staged`, or the branch against
 main), then read enough of the surrounding code to judge whether a change is
 actually wrong rather than merely unfamiliar. Run the tests. Run the private
-regression suite too if `recomps-altadena` is beside the public repo — it pins
+regression suite too if a private market repo is beside this one — it pins
 real numbers, and a change that moves one of them is the highest-signal finding
 available.
 

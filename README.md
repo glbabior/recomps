@@ -37,37 +37,51 @@ Alongside it: a JSON snapshot of every row and statistic, and a methodology docu
 
 ## The architecture
 
+The order matters, and it is the opposite of the obvious one. The cheap,
+exact step runs first and answers most of the question; the expensive,
+fallible step runs last against only what is left.
+
 ```
-                     ┌──────────────────────────────────────────┐
-   market plugin ───▶ │  PLANNER                                 │
-   (geometry,         │  what to collect, from which sources     │
-    sources,          └───────────────────┬──────────────────────┘
-    subject)                              │  fan out, ~7–8 items per worker
-                          ┌───────────────┼───────────────┐
-                          ▼               ▼               ▼
-                     ┌─────────┐    ┌─────────┐    ┌─────────┐
-                     │ worker  │    │ worker  │    │ worker  │   tool-using LLM calls
-                     │ sold    │    │ price   │    │ geocode │   with a per-item
-                     │ comps   │    │ history │    │         │   call budget
-                     └────┬────┘    └────┬────┘    └────┬────┘
-                          └───────────────┼───────────────┘
-                                          ▼
-                     ┌──────────────────────────────────────────┐
-                     │  VERIFIER                                │
-                     │  every fact matched against the known    │
-                     │  sale price and date, or rejected        │
-                     └───────────────────┬──────────────────────┘
+  market plugin          1. BACKBONE  — deterministic, free
+  (geometry,      ──▶    read each index page's own embedded JSON
+   sources,              → every sale, with coordinates and property URLs
+   subject)                              │
                                          ▼
-                     ┌──────────────────────────────────────────┐
-                     │  DATASET  ──▶  deterministic analysis     │
-                     │  exclusions ▸ statistics ▸ valuation      │
-                     │  ▸ guidance ▸ quadrants ▸ agents          │
-                     └───────────────────┬──────────────────────┘
+                         2. IDENTIFY — keep what matches the profile's
+                            property type (its own label beats a heuristic)
+                                         │
                                          ▼
-                        workbook  ·  snapshot  ·  methodology
+                         3. FAN OUT — only the gaps, in parallel workers
+                    ┌────────────────────┼────────────────────┐
+                    ▼                    ▼                    ▼
+              ┌──────────┐         ┌──────────┐         ┌──────────┐
+              │ worker   │         │ worker   │         │ worker   │  each: fetch
+              │ agent &  │         │  price   │         │   lot    │  a page, trim
+              │brokerage │         │ history  │         │   size   │  it, read it
+              └────┬─────┘         └────┬─────┘         └────┬─────┘  under budget
+                   └────────────────────┼────────────────────┘
+                                        ▼
+                         4. VERIFY — every claim matched against the known
+                            sale price, with dates as a tolerance. Rejections
+                            are reported, never silently dropped.
+                                        │
+                                        ▼
+                         5. GEOCODE — only parcels whose coordinates did not
+                            come free. Street name checked against the answer.
+                                        │
+                                        ▼
+              DATASET ──▶ exclusions ▸ statistics ▸ valuation ▸ guidance
+                          ▸ quadrants ▸ agents        (all deterministic)
+                                        │
+                                        ▼
+                     workbook  ·  snapshot  ·  methodology
 ```
 
-Four ideas hold this up.
+Measured on a real market: step 1 returns 40 sales with coordinates for
+nothing; step 3 costs about four cents a page and is needed for roughly as
+many pages as have gaps; the whole run attributes 95% of sales.
+
+The ideas holding it up:
 
 **The research layer is an interface, not a hard dependency.** `FixtureResearcher` reads recorded JSON; `LiveResearcher` researches the web. They are interchangeable, which is why the entire test suite — including every number the analysis produces — runs offline and deterministically.
 
@@ -95,6 +109,9 @@ These are real failures from real runs, and the reason each guard exists.
 | **The stale attribution** | A property page attributes the listing agent of a transaction from decades ago. | Every attribution is verified against the known sale price and date before it is accepted. |
 | **The rounded acre** | An aggregator publishes acreage to two decimals. On a 5,000 sqft parcel that is ±4% of the $/sqft. | Rounded sizes are flagged and the caveat travels with the statistics. |
 | **The closed "active" listing** | An index still lists a property as for sale days after it closed, inflating both sides of the market. | Reconciliation moves it to the sold side and notes the move. |
+| **The lot number that looks like a flat** | MLS records append a lot number to parcel addresses, so one sale appears both bare and suffixed — twice on one page, in one case a dollar apart. Counted twice, it shifts every statistic. | Address identity is profile-aware: a condo's `#2` is its identity, a parcel's `#18` is an artifact. Duplicates collapse into whichever row carries more, and the merge is reported. |
+| **The agent who is not a person** | A property page named a buyer's agent: *Out Of Area Out Of Area*. It is MLS filler for "nobody", and it reads exactly like a name — it would have earned closings and a ranking in the agent table. | Placeholder names are recognised and rejected with a reason, rather than becoming a person. |
+| **The challenge page served as success** | A site answers an automated request with HTTP 200 and a "verify you are human" page. Read as content, it yields no listings — a silent zero that looks like a quiet market. | Response bodies are checked for challenge markers before being treated as results. |
 
 ## The analysis, and why it is shaped this way
 
@@ -226,18 +243,51 @@ The interface is careful about one distinction the engine makes and a screen eas
 
 It is also explicit about who pays before a run starts, since the reading is charged either to a Claude subscription or to a metered API account.
 
+## Where this is now
+
+Working, in daily-usable shape, with limits worth stating plainly.
+
+**Solid.** The whole deterministic analysis — exclusions, statistics, the
+four valuation bases, pricing strategies, sold-to-ask, quadrants, agents —
+reproduces a real hand-run analysis to the dollar. The workbook, snapshots,
+run history and reopening are done. The interface covers everything the
+command line does. 220 tests, all offline; a live run needs no test to pass.
+
+**Working, with caveats.** Live research runs end to end against real sites
+and attributed 95% of sales on its last full run. It is one market's worth of
+evidence, though, and portal behaviour changes without notice — the source
+notes in a market plugin are priors to re-check cheaply at the start of a run,
+not permanent facts.
+
+**Known gaps.**
+
+- *No active listings.* The source that carried them now refuses this tool's
+  requests. That costs the asking-price valuation basis and the best agent
+  attribution. Going around a block is not on the table, so this needs either
+  a different source or a browser session the owner drives.
+- *Improved-property profiles are unproven.* Houses and condos are wired
+  through the entire pipeline and tested structurally, but no real run has
+  validated their identification heuristics. They ship marked experimental and
+  say so in their own output.
+- *Dual-agency detection has thin evidence.* The check works, but the only
+  sources observed to name both sides of a sale are IDX mirror pages, found by
+  search rather than at a known address. Expect it to fire rarely.
+
 ## Development
 
 ```bash
-uv venv --python 3.13 && uv pip install -e ".[dev]"
+uv venv --python 3.13 && uv pip install -e ".[dev,live,ui]"
 pytest
 recomps run --market demoville --offline --as-of 2026-08-31
 ```
 
-Live research needs the optional extra:
+Three optional extras, so the engine and the whole test suite install without
+any of them: `live` (the Anthropic SDK and an HTTP client), `ui` (Streamlit),
+`dev` (pytest and ruff).
+
+Live research against a market's real sources:
 
 ```bash
-uv pip install -e ".[dev,live]"
 recomps run --market-path ../my-market --live
 ```
 
@@ -255,7 +305,19 @@ exactly that reason.
 cost sits; a capped run is the cheap way to check a market's sources still work
 before committing to a full one.
 
-Tests cover the quadrant classifier (including a divider parcel and the E-street-name trap), bracket selection, sold-to-ask arithmetic, brokerage-family grouping, address normalization, profile validation, snapshot round-trips, and a structural check that a non-land profile genuinely reshapes the workbook. Everything runs offline.
+**Everything runs offline.** The fetcher is exercised against a fake HTTP
+client, the reader against recorded pages, and the interface through
+Streamlit's own test harness — so no test needs a network, an API key, or a
+browser. That is a property of the design rather than an accident: the research
+layer is an interface with a fixture implementation behind it.
+
+What the tests actually pin: the quadrant classifier including a divider parcel
+and the street-name trap; bracket selection; sold-to-ask arithmetic; brokerage
+grouping; address identity under both profile rules; the verification pass
+accepting a drifted date but rejecting a decades-old sale; that no workbook
+formula names a column letter; that a non-land profile genuinely reshapes the
+sheet; that opening a saved run recomputes nothing; and that the interface
+binds to localhost only.
 
 ## Built with Claude
 

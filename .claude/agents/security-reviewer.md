@@ -32,7 +32,7 @@ Where leaks actually come from, in order of observed frequency:
 5. **Placeholder and example strings** in interface code and docs.
 
 Run both halves of the check. `recomps/tests/test_privacy.py` asserts that
-everything shipped looks synthetic. `recomps-altadena/tests/test_no_leaks.py`
+everything shipped looks synthetic. The private market repo's `test_no_leaks.py`
 holds the denylist the public repo cannot hold and scans the public checkout
 with it. Run the private one if the sibling repo is present, and say so
 explicitly if it is absent, because then the strong check did not happen.
