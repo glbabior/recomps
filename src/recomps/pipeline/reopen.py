@@ -64,12 +64,16 @@ class StoredRun:
     window_start: str
     window_end: str
     researcher: str
+    profile: dict[str, Any] = field(default_factory=dict)
     sold: list[dict[str, Any]] = field(default_factory=list)
     active: list[dict[str, Any]] = field(default_factory=list)
     stats: dict[str, Any] = field(default_factory=dict)
     valuation: dict[str, Any] = field(default_factory=dict)
     guidance: dict[str, Any] = field(default_factory=dict)
     areas: dict[str, Any] = field(default_factory=dict)
+    size_bands: dict[str, Any] = field(default_factory=dict)
+    ladder: dict[str, Any] = field(default_factory=dict)
+    diagnostics: dict[str, Any] = field(default_factory=dict)
     agents: dict[str, Any] = field(default_factory=dict)
     excluded: list[dict[str, Any]] = field(default_factory=list)
     caveats: list[str] = field(default_factory=list)
@@ -98,6 +102,7 @@ def read_stored(snapshot: Snapshot) -> StoredRun:
     return StoredRun(
         market=block.get("market", ""),
         profile_name=(block.get("profile") or {}).get("name", ""),
+        profile=dict(block.get("profile") or {}),
         run_at=block.get("run_at", ""),
         window_start=block.get("window_start", ""),
         window_end=block.get("window_end", ""),
@@ -108,6 +113,9 @@ def read_stored(snapshot: Snapshot) -> StoredRun:
         valuation=dict(payload.get("valuation") or {}),
         guidance=dict(payload.get("guidance") or {}),
         areas=dict(payload.get("areas") or {}),
+        size_bands=dict(payload.get("size_bands") or {}),
+        ladder=dict(payload.get("ladder") or {}),
+        diagnostics=dict(payload.get("diagnostics") or {}),
         agents=dict(payload.get("agents") or {}),
         excluded=list(payload.get("excluded") or []),
         caveats=list(payload.get("caveats") or []),

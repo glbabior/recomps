@@ -524,3 +524,304 @@ def test_a_short_page_is_left_alone():
 
     page = "Listed by A. Example with Example Realty."
     assert focus_text(page) == page
+
+
+# ---------------------------------------------------------------------------
+# A page that serves a subset of its own results
+# ---------------------------------------------------------------------------
+#
+# The worst failure an index adapter can have, because it does not look like
+# one: the run completes, the workbook builds, and the market merely appears
+# smaller than it is. One observed index claimed 166 properties and surfaced 9.
+
+
+def _payload_html(records: list[dict], total: int | str | None) -> str:
+    import json
+
+    payload = {"props": {"searchData": {"homes": records}}}
+    if total is not None:
+        payload["props"]["searchData"]["totalCount"] = total
+    return f'<html><script id="__NEXT_DATA__">{json.dumps(payload)}</script></html>'
+
+
+def _spec(total_path: str = "props.searchData.totalCount") -> EmbeddedSpec:
+    return EmbeddedSpec.from_config(
+        {
+            "script_id": "__NEXT_DATA__",
+            "records_path": "props.searchData.homes",
+            "total_path": total_path,
+            "fields": {"address": {"path": "addr", "transform": "text"}},
+        }
+    )
+
+
+def test_a_page_serving_fewer_results_than_it_claims_says_so():
+    html = _payload_html([{"addr": f"{i} Example St"} for i in range(9)], total=166)
+    found = extract_records(html, _spec())
+    assert found.count == 9
+    assert found.claimed_total == 166
+    assert found.is_short
+    assert any("claims 166" in p for p in found.problems)
+
+
+def test_a_page_that_agrees_with_itself_raises_nothing():
+    html = _payload_html([{"addr": f"{i} Example St"} for i in range(34)], total=34)
+    found = extract_records(html, _spec())
+    assert found.count == 34
+    assert not found.is_short
+    assert not found.problems
+
+
+def test_a_claimed_total_written_as_text_is_still_read():
+    """Sites render their own counts as prose: 'Total Listings: 36 parcels'."""
+    html = _payload_html([{"addr": f"{i} Example St"} for i in range(9)], total="166 properties")
+    found = extract_records(html, _spec())
+    assert found.claimed_total == 166
+    assert found.is_short
+
+
+def test_a_source_that_declares_no_total_is_not_penalised():
+    """Most payloads carry no count. That is not a problem to report."""
+    html = _payload_html([{"addr": f"{i} Example St"} for i in range(9)], total=None)
+    found = extract_records(html, EmbeddedSpec.from_config({
+        "script_id": "__NEXT_DATA__",
+        "records_path": "props.searchData.homes",
+        "fields": {"address": {"path": "addr", "transform": "text"}},
+    }))
+    assert found.count == 9
+    assert found.claimed_total is None
+    assert not found.is_short
+    assert not found.problems
+
+
+def test_an_unreadable_total_is_reported_rather_than_assumed_fine():
+    html = _payload_html([{"addr": "1 Example St"}], total=None)
+    found = extract_records(html, _spec("props.searchData.nothingHere"))
+    assert found.claimed_total is None
+    assert any("could not be checked" in p for p in found.problems)
+
+
+def test_more_extracted_than_claimed_is_not_treated_as_short():
+    """A stale or rounded site-side count must not fail a complete extraction."""
+    html = _payload_html([{"addr": f"{i} Example St"} for i in range(40)], total=38)
+    found = extract_records(html, _spec())
+    assert not found.is_short
+    assert not any("claims" in p for p in found.problems)
+
+
+# ---------------------------------------------------------------------------
+# The active side of an index
+# ---------------------------------------------------------------------------
+#
+# Which side of the market a source describes is declared by the plugin, not
+# guessed from its name or its role text -- otherwise a market's wording
+# becomes load-bearing.
+
+
+def _index_source(side: str | None) -> object:
+    from recomps.plugin.market import SourceSpec
+
+    config = {
+        "embedded": {
+            "script_id": "__NEXT_DATA__",
+            "records_path": "props.searchData.homes",
+            "total_path": "props.searchData.totalHomes",
+            "fields": {
+                "address": {"path": "addr", "transform": "text"},
+                "list_price": {"path": "price", "transform": "float"},
+                "sold_price": {"path": "price", "transform": "float"},
+                "lot_sqft": {"path": "lot", "transform": "sqft"},
+            },
+        }
+    }
+    if side:
+        config["side"] = side
+    return SourceSpec(
+        name=f"index-{side or 'sold'}", adapter="x", url="https://example.invalid/i",
+        config=config,
+    )
+
+
+def _index_html(count: int, total: int | None = None) -> str:
+    homes = [
+        {"addr": f"{i} Example St", "price": 500_000 + i, "lot": "0.25 acres"}
+        for i in range(count)
+    ]
+    data = {"props": {"searchData": {"homes": homes}}}
+    if total is not None:
+        data["props"]["searchData"]["totalHomes"] = total
+    return f'<html><script id="__NEXT_DATA__">{json.dumps(data)}</script></html>'
+
+
+def _reader(html: str):
+    from recomps.research.live import LiveResearcher, LiveRunLog
+
+    class Response:
+        ok, text, status = True, html, 200
+
+        def describe(self):
+            return ""
+
+    class Fetcher:
+        def fetch(self, url, adapter_version=""):
+            return Response()
+
+    reader = LiveResearcher.__new__(LiveResearcher)
+    reader.fetcher = Fetcher()
+    reader.log = LiveRunLog()
+    return reader
+
+
+def test_a_source_declared_active_yields_listings_not_sales():
+    from recomps.config.profile import vacant_land_profile
+    from recomps.model.comp import ActiveListing
+
+    source = _index_source("active")
+    rows, outcome = _reader(_index_html(3, total=3))._read_index(
+        source, vacant_land_profile("p"), source.config
+    )
+    assert not outcome.error
+    assert len(rows) == 3
+    assert all(isinstance(r, ActiveListing) for r in rows)
+    assert rows[0].list_price == 500_000
+
+
+def test_a_source_with_no_declared_side_is_still_the_sold_backbone():
+    """Existing plugins declare no side; they must keep working unchanged."""
+    from recomps.config.profile import vacant_land_profile
+    from recomps.model.comp import SoldComp
+
+    source = _index_source(None)
+    rows, _ = _reader(_index_html(3))._read_index(
+        source, vacant_land_profile("p"), source.config
+    )
+    assert all(isinstance(r, SoldComp) for r in rows)
+
+
+def test_rounded_acreage_from_an_index_is_flagged_as_rounded():
+    """A rate built on 0.25 acres is not precise to the cent, and the caveat
+    has to travel with it."""
+    from recomps.config.profile import vacant_land_profile
+
+    source = _index_source("active")
+    rows, _ = _reader(_index_html(2, total=2))._read_index(
+        source, vacant_land_profile("p"), source.config
+    )
+    assert all(r.lot_size_is_rounded for r in rows)
+
+
+def test_an_index_serving_fewer_than_it_claims_is_reported_as_incomplete():
+    from recomps.config.profile import vacant_land_profile
+
+    source = _index_source("active")
+    rows, outcome = _reader(_index_html(9, total=166))._read_index(
+        source, vacant_land_profile("p"), source.config
+    )
+    assert len(rows) == 9
+    assert "claims 166" in (outcome.error or "")
+
+
+def test_attribution_splits_only_where_a_licence_says_a_person_is_named():
+    """The obvious rule -- split on the comma -- invents an agent called
+    "Sender Realty" and a brokerage called "Inc." """
+    from recomps.adapters.embedded import TRANSFORMS
+
+    agent, broker = TRANSFORMS["attribution_agent"], TRANSFORMS["attribution_brokerage"]
+
+    named = "Jane Roe DRE # 01234567, Some Brokerage"
+    assert agent(named) == "Jane Roe"
+    assert broker(named) == "Some Brokerage"
+
+    incorporated = "Sender Realty, Inc."
+    assert agent(incorporated) is None
+    assert broker(incorporated) == "Sender Realty, Inc."
+
+    both = "Letrice Barge DRE # 02091064, LA Top Broker, Inc."
+    assert agent(both) == "Letrice Barge"
+    assert broker(both) == "LA Top Broker, Inc."
+
+    assert agent("COMPASS") is None
+    assert broker("COMPASS") == "COMPASS"
+    assert agent(None) is None and broker(None) is None
+
+
+def test_other_licence_labels_are_recognised():
+    from recomps.adapters.embedded import TRANSFORMS
+
+    assert TRANSFORMS["attribution_agent"]("Ann Lee CalBRE #123, X Realty") == "Ann Lee"
+    assert TRANSFORMS["attribution_agent"]("Bo Ng License 99, Y Realty") == "Bo Ng"
+
+
+def test_a_surname_beginning_with_a_licence_label_is_not_truncated():
+    """'Licata' starts with 'Lic'. Word boundaries, not prefixes."""
+    from recomps.adapters.embedded import TRANSFORMS
+
+    assert TRANSFORMS["attribution_brokerage"]("Licata Rossi Realty") == "Licata Rossi Realty"
+    assert TRANSFORMS["attribution_agent"]("Licata Rossi Realty") is None
+
+
+# ---------------------------------------------------------------------------
+# A window is a request, not a promise
+# ---------------------------------------------------------------------------
+
+
+def test_a_run_says_when_the_sources_could_not_reach_back_that_far():
+    """Widening the window is the natural next move and does nothing: an index
+    serves its most recent page. A comp that is not published looks exactly
+    like a comp that does not exist."""
+    from recomps.model.comp import SoldComp
+    from recomps.research.base import Diagnostics
+    from recomps.research.live import _report_reach
+
+    diagnostics = Diagnostics()
+    comps = [
+        SoldComp(address="1 Example St", sold_date=date(2026, 7, 2)),
+        SoldComp(address="2 Example St", sold_date=date(2026, 8, 9)),
+    ]
+    _report_reach(diagnostics, comps, date(2026, 5, 18))
+    note = " ".join(diagnostics.not_found)
+    assert "reached back only to 2026-07-02" in note
+    assert "45 days" in note
+    assert "absent, not nonexistent" in note
+
+
+def test_a_run_that_reached_the_whole_window_says_nothing():
+    from recomps.model.comp import SoldComp
+    from recomps.research.base import Diagnostics
+    from recomps.research.live import _report_reach
+
+    diagnostics = Diagnostics()
+    _report_reach(
+        diagnostics,
+        [SoldComp(address="1 Example St", sold_date=date(2026, 5, 1))],
+        date(2026, 5, 18),
+    )
+    assert not diagnostics.not_found
+
+
+def test_thin_agent_attribution_on_listings_is_declared():
+    """A zero in an agent's live column must not read as 'nothing on the
+    market' when it means 'the index did not say'."""
+    from recomps.model.comp import ActiveListing
+    from recomps.research.base import Diagnostics
+    from recomps.research.live import _report_active_attribution
+
+    diagnostics = Diagnostics()
+    listings = [ActiveListing(address=f"{i} Example St") for i in range(34)]
+    for listing in listings[:6]:
+        listing.agent = "A. Agent"
+    _report_active_attribution(diagnostics, listings)
+    note = " ".join(diagnostics.not_found)
+    assert "Only 6 of 34" in note
+    assert "a floor, not a tally" in note
+
+
+def test_well_attributed_listings_raise_nothing():
+    from recomps.model.comp import ActiveListing
+    from recomps.research.base import Diagnostics
+    from recomps.research.live import _report_active_attribution
+
+    diagnostics = Diagnostics()
+    listings = [ActiveListing(address=f"{i} Example St", agent="A") for i in range(10)]
+    _report_active_attribution(diagnostics, listings)
+    assert not diagnostics.not_found

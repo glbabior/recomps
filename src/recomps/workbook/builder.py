@@ -188,6 +188,52 @@ def _write_summary(
             c = ws.cell(row=row, column=3, value=active_formula)
             c.font, c.number_format = st.BODY, fmt
 
+    # -- core view ---------------------------------------------------------
+    # The bounds are editable and the figures recompute from them, which is the
+    # only way the control means anything: the point of a core view is to see
+    # how much one anomaly moves the headline, and that is a question you ask
+    # by moving the bounds.
+    #
+    # Count and average only. A conditional *median* cannot be written in this
+    # workbook's formula vocabulary -- it needs an array formula, which is
+    # exactly what the pre-2007 constraint rules out -- so the core median is
+    # reported in the app and the methodology document instead, and the note
+    # below says so rather than leaving a reader to wonder.
+    ex = profile.exclusions
+    if ex.core_min_ppsf is not None and ex.core_max_ppsf is not None:
+        row += 2
+        ws.cell(row=row, column=1, value="Core view").font = st.SECTION
+        row += 1
+        ws.cell(row=row, column=1, value="Bounds $/sq ft (editable low / high)").font = st.BODY
+        st.style_editable(ws.cell(row=row, column=2, value=ex.core_min_ppsf), FMT_MONEY_CENTS)
+        st.style_editable(ws.cell(row=row, column=3, value=ex.core_max_ppsf), FMT_MONEY_CENTS)
+        core_lo, core_hi = f"$B${row}", f"$C${row}"
+
+        sold_ppsf, active_ppsf = sold_range("ppsf"), active_range("ppsf")
+        sold_in = f"({sold_ppsf}>={core_lo})*({sold_ppsf}<={core_hi})"
+        active_in = f"({active_ppsf}>={core_lo})*({active_ppsf}<={core_hi})"
+
+        row += 1
+        core_count_row = row
+        ws.cell(row=row, column=1, value="Properties inside the bounds").font = st.BODY
+        for column, expression in ((2, sold_in), (3, active_in)):
+            c = ws.cell(row=row, column=column, value=f"=SUMPRODUCT({expression})")
+            c.font, c.number_format = st.BODY, FMT_INT
+
+        row += 1
+        ws.cell(row=row, column=1, value="Core average $/sq ft").font = st.BODY
+        for column, expression, values in (
+            (2, sold_in, sold_ppsf), (3, active_in, active_ppsf)
+        ):
+            letter = "B" if column == 2 else "C"
+            c = ws.cell(
+                row=row,
+                column=column,
+                value=f"=IF({letter}{core_count_row}=0,\"\","
+                f"SUMPRODUCT({expression}*{values})/{letter}{core_count_row})",
+            )
+            c.font, c.number_format = st.BODY, FMT_MONEY_CENTS
+
     # -- subject valuation block ------------------------------------------
     row += 2
     ws.cell(row=row, column=1, value=f"{profile.subject.label} - Estimated Value").font = st.SECTION
@@ -262,6 +308,62 @@ def _write_summary(
         else:
             label_cell.font = value_cell.font = st.BODY
 
+    # -- bracket ladder ----------------------------------------------------
+    # Static values, like the other cross-tabs: each rung is a different
+    # selection of rows, which a live formula over one range cannot express.
+    if result.ladder.rows:
+        row += 2
+        ws.cell(row=row, column=1, value='How wide is "similar"?').font = st.SECTION
+        row += 1
+        headers = ["Size range", "Sold", "Median $/sqft", "Avg $/sqft",
+                   "Value at median", "Value at average"]
+        for i, header in enumerate(headers, start=1):
+            st.style_header(ws.cell(row=row, column=i, value=header))
+        for rung in result.ladder.rows:
+            row += 1
+            label = rung.label
+            if rung.is_profile_bracket:
+                label += "  <- the figures above"
+            elif rung.is_thin:
+                label += "  (too thin to lead on)"
+            values = [label, rung.count, rung.median_ppsf, rung.avg_ppsf,
+                      rung.value_from_median, rung.value_from_avg]
+            formats = [None, FMT_INT, FMT_MONEY_CENTS, FMT_MONEY_CENTS,
+                       FMT_MONEY, FMT_MONEY]
+            for i, (value, fmt) in enumerate(zip(values, formats, strict=True), start=1):
+                cell = ws.cell(row=row, column=i, value=value if value is not None else NOT_FOUND)
+                cell.font = st.PRIMARY if rung.is_profile_bracket else st.BODY
+                if fmt and value is not None:
+                    cell.number_format = fmt
+
+    # -- by-size table -----------------------------------------------------
+    # Sits directly under the valuation because it is the evidence for it: the
+    # primary basis prices against similar sizes, and this is the table that
+    # shows whether size actually moves the rate in this market.
+    if result.size_bands.rows:
+        row += 2
+        ws.cell(row=row, column=1, value="By size").font = st.SECTION
+        row += 1
+        headers = [
+            f"{profile.metric_label} band", "Sold", "Median $/sqft", "Avg $/sqft",
+            f"Median {profile.metric_label.lower()}", "Median price",
+        ]
+        for i, header in enumerate(headers, start=1):
+            st.style_header(ws.cell(row=row, column=i, value=header))
+        for band in result.size_bands.rows:
+            row += 1
+            values = [
+                band.label + ("  <- your property" if band.holds_subject else ""),
+                band.count, band.median_ppsf, band.avg_ppsf,
+                band.median_size, band.median_price,
+            ]
+            formats = [None, FMT_INT, FMT_MONEY_CENTS, FMT_MONEY_CENTS, FMT_INT, FMT_MONEY]
+            for i, (value, fmt) in enumerate(zip(values, formats, strict=True), start=1):
+                cell = ws.cell(row=row, column=i, value=value if value is not None else NOT_FOUND)
+                cell.font = st.PRIMARY if band.holds_subject else st.BODY
+                if fmt and value is not None:
+                    cell.number_format = fmt
+
     # -- by-area table -----------------------------------------------------
     row += 2
     ws.cell(row=row, column=1, value="By area").font = st.SECTION
@@ -300,7 +402,21 @@ def _write_summary(
     # -- notes -------------------------------------------------------------
     row += 2
     ws.cell(row=row, column=1, value="Notes").font = st.SECTION
-    notes = list(result.caveats) + list(result.area_table.notes) + list(result.warnings)
+    core_note = []
+    if result.profile.exclusions.core_min_ppsf is not None:
+        core_note.append(
+            "The core view sets extreme $/sq ft aside for a second reading; nothing is "
+            "removed from the data. Its median is in this run's methodology document and "
+            "in the app -- a conditional median cannot be a live formula here."
+        )
+    notes = (
+        core_note
+        + list(result.ladder.notes)
+        + list(result.caveats)
+        + list(result.size_bands.notes)
+        + list(result.area_table.notes)
+        + list(result.warnings)
+    )
     notes.append(
         "Blue text on yellow is editable. Every statistic above is a live formula over the "
         "comp sheets, so corrections propagate."
@@ -407,9 +523,11 @@ def _write_agents(
     agent_range = _col_range(S, sold, "agent", sold_last)
     ratio_range = _col_range(S, sold, "sold_to_ask", sold_last)
     brokerage_range = _col_range(S, sold, "brokerage", sold_last)
+    ppsf_range = _col_range(S, sold, "ppsf", sold_last)
+    size_range = _col_range(S, sold, "metric", sold_last)
 
     ws.column_dimensions["A"].width = 34
-    for letter in ("B", "C", "D", "E"):
+    for letter in ("B", "C", "D", "E", "F", "G"):
         ws.column_dimensions[letter].width = 18
 
     ws["A1"] = "Who is closing sales here - listing side"
@@ -443,7 +561,9 @@ def _write_agents(
     ws.cell(row=row, column=1, value="Agent performance").font = st.SECTION
     row += 1
     for i, header in enumerate(
-        ["Agent", "Brokerage", "Closings", "Avg sold / ask", "Pattern"], start=1
+        ["Agent", "Brokerage", "Closings", "Avg sold / ask", "Avg $/sq ft",
+         f"Avg {result.profile.metric_label.lower()}", "Pattern"],
+        start=1,
     ):
         st.style_header(ws.cell(row=row, column=i, value=header))
 
@@ -466,12 +586,26 @@ def _write_agents(
             value=f'=IF(C{row}=0,"",AVERAGEIF({agent_range},"{agent.agent}",{ratio_range}))',
         )
         ratio.number_format = FMT_PERCENT
-        pattern = ws.cell(
+        # The rate actually achieved, beside the size it was achieved on. A high
+        # sold-to-ask can be a low ask; this is the column that says otherwise.
+        rate = ws.cell(
             row=row,
             column=5,
+            value=f'=IF(C{row}=0,"",AVERAGEIF({agent_range},"{agent.agent}",{ppsf_range}))',
+        )
+        rate.number_format = FMT_MONEY_CENTS
+        size = ws.cell(
+            row=row,
+            column=6,
+            value=f'=IF(C{row}=0,"",AVERAGEIF({agent_range},"{agent.agent}",{size_range}))',
+        )
+        size.number_format = FMT_INT
+        pattern = ws.cell(
+            row=row,
+            column=7,
             value=(agent.flag or "") + (" - dual agency" if agent.dual_agency else ""),
         )
-        for cell in (name, broker, closings, ratio, pattern):
+        for cell in (name, broker, closings, ratio, rate, size, pattern):
             cell.font = st.BODY
             if fill:
                 cell.fill = fill

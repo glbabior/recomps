@@ -137,7 +137,25 @@ class FixtureResearcher:
 
         diagnostics = Diagnostics(sources_used=[f"fixtures:{directory.name}"])
         if dropped:
+            # A recording covers the days it covers; the window slides with the
+            # run date. Replay a March dataset in September and most of it
+            # silently disappears, leaving a smaller market that reads exactly
+            # like a real one -- and every figure, including the agent tables,
+            # quietly describes a different set of sales.
+            recorded = sorted(c.sold_date for c in sold if c.sold_date)
+            if recorded:
+                where = (
+                    f"The recording holds sales from {recorded[0]} to "
+                    f"{recorded[-1]} -- {recorded[-1]} is the last sale in it, "
+                    "not a setting. Dating a run to that day, or shortly after, "
+                    "covers the whole recording."
+                )
+            else:
+                where = ""
             diagnostics.not_found.append(
-                f"{dropped} fixture sale(s) fell outside {window_start}..{window_end}"
+                f"This run replayed recorded data and asked for sales from "
+                f"{window_start} to {window_end}, so {dropped} of its {len(sold)} "
+                f"recorded sales are outside the window and in no figure. {where}"
             )
+
         return Dataset(sold=in_window, active=active, diagnostics=diagnostics)

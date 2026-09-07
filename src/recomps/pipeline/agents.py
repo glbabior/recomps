@@ -5,7 +5,12 @@ caveats below are part of the output, not decoration around it:
 
 * Samples run one to three sales per agent. That is not a performance measure.
 * A high sold-to-ask ratio partly reflects a deliberately low list price, so
-  volume and ratio together are a signal and not an endorsement.
+  volume and ratio together are a signal and not an endorsement. The rate an
+  agent actually achieved is reported beside the ratio for exactly that reason:
+  beating a low ask is not the same as getting a good price.
+* That rate carries the same size confound as everywhere else in this project,
+  so the median size it was achieved on sits next to it. An agent working small
+  parcels shows a higher $/sqft without being a better agent.
 * The question to judge a candidate on is projected sale price against the
   comps -- which is why the recommended interview test is to ask each candidate
   for both a list price and an expected close *before* showing them your
@@ -54,6 +59,10 @@ CAVEATS = [
     "A high sold-to-ask ratio can reflect a deliberately low list price as much as skill.",
     "Judge candidates on projected sold price against the comps, not on sold-vs-ask alone.",
     (
+        "Read an agent's $/sqft beside the size it was achieved on: a rate looks better "
+        "on smaller parcels, which is the same size premium the valuation corrects for."
+    ),
+    (
         "Interview test: ask each candidate for a list price AND an expected close "
         "before showing them your numbers."
     ),
@@ -76,9 +85,17 @@ class BrokerageRow:
     family: str
     closings: int
     share: float | None = None
+    #: Listings this firm currently holds. Closings are history; this is who is
+    #: working the market now, and the two answer different questions.
+    active_listings: int = 0
 
     def to_dict(self) -> dict:
-        return {"family": self.family, "closings": self.closings, "share": self.share}
+        return {
+            "family": self.family,
+            "closings": self.closings,
+            "share": self.share,
+            "active_listings": self.active_listings,
+        }
 
 
 @dataclass
@@ -87,6 +104,13 @@ class AgentRow:
     brokerage: str | None
     closings: int
     avg_sold_to_ask: float | None
+    #: The rate this agent's sales actually achieved. Read beside `avg_size`:
+    #: a rate without the size that produced it inverts the real comparison.
+    avg_ppsf: float | None = None
+    avg_size: float | None = None
+    #: Listings held right now. An agent with no closings here and three live
+    #: listings is working this market, and is worth a conversation.
+    active_listings: int = 0
     #: "shortlist" | "caution" | "" -- a generic pattern flag, not a judgement
     #: about a named individual.
     flag: str = ""
@@ -98,6 +122,9 @@ class AgentRow:
             "brokerage": self.brokerage,
             "closings": self.closings,
             "avg_sold_to_ask": self.avg_sold_to_ask,
+            "avg_ppsf": self.avg_ppsf,
+            "avg_size": self.avg_size,
+            "active_listings": self.active_listings,
             "flag": self.flag,
             "dual_agency": self.dual_agency,
         }
@@ -132,17 +159,33 @@ def _flag(closings: int, ratio: float | None, reduced: bool) -> str:
 
 
 def analyze(
-    sold: list[SoldComp], families: dict[str, list[str]] | None = None
+    sold: list[SoldComp],
+    families: dict[str, list[str]] | None = None,
+    denominator: str = "lot_sqft",
+    active: list | None = None,
 ) -> AgentAnalysis:
+    active = list(active or [])
+    live_by_agent: dict[str, int] = defaultdict(int)
+    for listing in active:
+        if listing.agent:
+            live_by_agent[listing.agent] += 1
+
     by_agent: dict[str, list[SoldComp]] = defaultdict(list)
     for comp in sold:
         if comp.agent:
             by_agent[comp.agent].append(comp)
+    # An agent with live listings and no closings here still belongs in the
+    # table: they are working this market now, which is the question a seller
+    # is actually asking.
+    for name in live_by_agent:
+        by_agent.setdefault(name, [])
 
     agents: list[AgentRow] = []
     for name, comps in by_agent.items():
         ratios = [r for c in comps if (r := c.sold_to_ask()) is not None]
         mean_ratio = statistics.fmean(ratios) if ratios else None
+        rates = [r for c in comps if (r := c.price_per_sqft(denominator)) is not None]
+        sizes = [v for c in comps if (v := c.metric_sqft(denominator)) is not None]
         agents.append(
             AgentRow(
                 agent=name,
@@ -151,6 +194,9 @@ def analyze(
                 ),
                 closings=len(comps),
                 avg_sold_to_ask=mean_ratio,
+                avg_ppsf=statistics.fmean(rates) if rates else None,
+                avg_size=statistics.fmean(sizes) if sizes else None,
+                active_listings=live_by_agent.get(name, 0),
                 flag=_flag(len(comps), mean_ratio, any(c.was_reduced() for c in comps)),
                 dual_agency=any(
                     c.buyer_agent and c.agent and c.buyer_agent.strip() == c.agent.strip()
@@ -166,8 +212,20 @@ def analyze(
         if family:
             counts[family] += 1
     attributed = sum(1 for c in sold if c.brokerage or c.agent)
+    live_counts: dict[str, int] = defaultdict(int)
+    for listing in active:
+        family = brokerage_family(listing.brokerage, families)
+        if family:
+            live_counts[family] += 1
+    for family in live_counts:
+        counts.setdefault(family, 0)
     brokerages = [
-        BrokerageRow(family=f, closings=n, share=(n / attributed if attributed else None))
+        BrokerageRow(
+            family=f,
+            closings=n,
+            share=(n / attributed if attributed else None),
+            active_listings=live_counts.get(f, 0),
+        )
         for f, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
     ]
 

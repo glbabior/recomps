@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from recomps.clock import to_local
 from recomps.pipeline.run import RunResult
 
 
@@ -41,7 +42,8 @@ def render(result: RunResult) -> str:
 
     add(f"# {result.market_description or result.market_name} — comp methodology")
     add("")
-    add(f"**Run:** {result.run_at.isoformat()}  ")
+    # Local, but with the offset kept, so it is both readable and exact.
+    add(f"**Run:** {to_local(result.run_at).isoformat()}  ")
     add(f"**Window:** {result.window_start} to {result.window_end} ({profile.window_days} days)  ")
     add(f"**Profile:** `{profile.name}` — {profile.property_type.value}, "
         f"priced on {profile.metric.value}  ")
@@ -154,6 +156,47 @@ def render(result: RunResult) -> str:
             add(f"| {strategy.label} | {_money(strategy.list_price)} | {span} |")
         add("")
         add(f"Floor / walk-away: {_money(result.guidance.floor)} ({result.guidance.floor_basis}).")
+        add("")
+
+    if result.ladder.rows:
+        add("### How wide is \"similar\"?")
+        add("")
+        add(
+            "| Size range | Sold | Median $/sqft | Avg $/sqft "
+            "| Value at median | Value at average |"
+        )
+        add("|---|---|---|---|---|---|")
+        for rung in result.ladder.rows:
+            mark = ""
+            if rung.is_profile_bracket:
+                mark = " **(the figures above)**"
+            elif rung.is_thin:
+                mark = " *(too thin to lead on)*"
+            add(f"| {rung.label}{mark} | {rung.count} | {_rate(rung.median_ppsf)} "
+                f"| {_rate(rung.avg_ppsf)} | {_money(rung.value_from_median)} "
+                f"| {_money(rung.value_from_avg)} |")
+        add("")
+        for note in result.ladder.notes:
+            add(note)
+            add("")
+
+    if result.size_bands.rows:
+        add("### By size")
+        add("")
+        add("| Band | Sold | Median $/sqft | Avg $/sqft | Median size | Median price |")
+        add("|---|---|---|---|---|---|")
+        for band in result.size_bands.rows:
+            mark = " **(your property)**" if band.holds_subject else ""
+            add(f"| {band.label}{mark} | {band.count} | {_rate(band.median_ppsf)} "
+                f"| {_rate(band.avg_ppsf)} | {_num(band.median_size)} "
+                f"| {_money(band.median_price)} |")
+        add("")
+        for note in result.size_bands.notes:
+            add(note)
+            add("")
+        add("Bands hold equal numbers of sales rather than equal size ranges, so every "
+            "row's median rests on a comparable sample. The size range each band actually "
+            "covers is in its label.")
         add("")
 
     add("### By area")

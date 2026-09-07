@@ -10,6 +10,14 @@ the band below it. Pricing at $499,000 rather than $505,000 does not cost six
 thousand dollars of value -- in a market where under-priced listings get bid up
 (F9), it buys the competition that recovers it.
 
+What that mechanic costs is not constant, and the strategy says so on every run.
+Because it drops to the edge *below* the anchor, the discount grows as the
+anchor rises through a band and then resets: an anchor of $549,999 lists at
+$499,000, and one of $551,000 lists at $549,000. A thousand dollars of estimate
+moves the recommendation by a whole band. That is inherent to pricing against
+search filters rather than a defect, but it is not something a reader should
+have to derive from two numbers on a screen.
+
 Expected sale ranges come from the run's own sold-to-ask distribution rather
 than fixed percentages, and they widen or narrow with the market accordingly.
 They are guidance, not regression-tested figures.
@@ -149,7 +157,11 @@ def build_guidance(
             tradeoff=(
                 f"Sits just under the ${_band_floor(anchor):,.0f} search cutoff, so it reaches "
                 "every buyer shopping the band below. Positioned to draw multiple offers and "
-                "bid up toward or above market value. Fastest sale."
+                "bid up toward or above market value. Fastest sale. "
+                f"That is ${anchor - compete:,.0f} ({(anchor - compete) / anchor:.1%}) under the "
+                f"estimate — a gap set by where the estimate falls inside its "
+                f"${DEFAULT_SEARCH_BAND:,.0f} band, not by the market. An estimate near the top "
+                "of a band gives up most of one; near the bottom, almost none."
             ),
             recommended=True,
         ),

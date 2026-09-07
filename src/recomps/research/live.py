@@ -103,6 +103,69 @@ def _to_sold_comp(row: dict) -> SoldComp:
     )
 
 
+def _report_reach(diagnostics, comps: list[SoldComp], window_start: date) -> None:
+    """Say when the sources could not reach as far back as the run asked.
+
+    A window is a request, not a promise. An index that serves its most recent
+    page of sales will not go further back because the window widened, so a
+    run can quietly cover half the period it was asked for -- and a comp that
+    is simply not published looks exactly like a comp that does not exist.
+    Widening the window again is the natural next move, and it does nothing.
+    """
+    dates = sorted(c.sold_date for c in comps if c.sold_date)
+    if not dates or dates[0] <= window_start:
+        return
+    missing = (dates[0] - window_start).days
+    diagnostics.not_found.append(
+        f"The sold sources reached back only to {dates[0]}, but this run asked for "
+        f"{window_start} -- {missing} days of the requested window returned nothing. "
+        "An index serves its most recent page of sales; widening the window will not "
+        "reach further back. Anything sold before that date is absent, not nonexistent."
+    )
+
+
+def _report_active_attribution(diagnostics, active: list[ActiveListing]) -> None:
+    """Say when listings mostly do not name an agent.
+
+    Otherwise a zero in an agent's live-listing column reads as "this agent has
+    nothing on the market", when it means "this index did not say who holds it".
+    """
+    if not active:
+        return
+    named = sum(1 for listing in active if listing.agent)
+    if named >= len(active) * 0.8:
+        return
+    diagnostics.not_found.append(
+        f"Only {named} of {len(active)} listings name an agent; the rest give a "
+        "brokerage alone. Live-listing counts per agent are therefore a floor, not "
+        "a tally -- a zero means this index did not say who holds the listing."
+    )
+
+
+def _to_active_listing(row: dict) -> ActiveListing:
+    """An index row on the for-sale side.
+
+    Deliberately not enriched the way a sold comp is: the fan-out verifies a
+    claim against a *known sale price and date*, and an active listing has
+    neither. Whatever the index gives is what it carries.
+    """
+    return ActiveListing(
+        address=str(row.get("address") or "").strip(),
+        list_price=row.get("list_price") or row.get("sold_price"),
+        listed_date=row.get("listed_date"),
+        lot_sqft=row.get("lot_sqft"),
+        living_sqft=row.get("living_sqft"),
+        beds=row.get("beds"),
+        baths=row.get("baths"),
+        brokerage=row.get("brokerage"),
+        agent=row.get("agent"),
+        lat=row.get("lat"),
+        lon=row.get("lon"),
+        lot_size_is_rounded=bool(row.get("lot_size_is_rounded")),
+        sources=[row["source_url"]] if row.get("source_url") else [],
+    )
+
+
 def _matches_profile(row: dict, profile: CompProfile) -> bool:
     """Whether a record is the kind of property being comped.
 
@@ -152,7 +215,13 @@ class LiveResearcher:
 
     def _read_index(
         self, source: SourceSpec, profile: CompProfile, raw_config: dict
-    ) -> tuple[list[SoldComp], SourceOutcome]:
+    ) -> tuple[list, SourceOutcome]:
+        """Read one index page into comps.
+
+        Which side of the market a source describes is declared, not guessed:
+        ``side = "active"`` in the plugin. Sniffing it out of a name or a role
+        string would make a market's wording load-bearing.
+        """
         outcome = SourceOutcome(name=source.name)
         embedded = raw_config.get("embedded")
         if not embedded or not source.url:
@@ -172,8 +241,15 @@ class LiveResearcher:
             outcome.error = "; ".join(extracted.problems[:2])
             return [], outcome
 
+        if extracted.is_short:
+            outcome.error = (
+                f"page claims {extracted.claimed_total} results, extracted "
+                f"{extracted.count}; treating the page as incomplete"
+            )
+
+        build = _to_active_listing if raw_config.get("side") == "active" else _to_sold_comp
         comps = [
-            _to_sold_comp(row)
+            build(row)
             for row in extracted.rows
             if _matches_profile(row, profile) and row.get("address")
         ]
@@ -304,13 +380,19 @@ class LiveResearcher:
         window_end: date,
     ) -> Dataset:
         comps: list[SoldComp] = []
+        active: list[ActiveListing] = []
 
         for source in market.sources():
             if not source.enabled or "embedded" not in source.config:
                 continue
             found, outcome = self._read_index(source, profile, source.config)
             self.log.sources.append(outcome)
-            comps.extend(found)
+            if source.config.get("side") == "active":
+                # No window filter: an asking price is about now, not about a
+                # period, and a listing carries no sale date to test.
+                active.extend(found)
+            else:
+                comps.extend(found)
 
         comps = [c for c in comps if _in_window(c, window_start, window_end)]
         self.log.anomalies = flag_anomalous_rows(comps)
@@ -329,10 +411,11 @@ class LiveResearcher:
         self._geocode_gaps(comps, market)
 
         diagnostics = self._diagnostics()
+        _report_reach(diagnostics, comps, window_start)
+        _report_active_attribution(diagnostics, active)
         # Active listings need their own index source. Saying "0 active" without
         # saying why reads as "nothing is for sale", which is a different and
         # much more interesting claim than "we could not look".
-        active: list[ActiveListing] = []
         if not active:
             reachable = [s.name for s in market.sources() if s.enabled and s.config.get("embedded")]
             configured = [

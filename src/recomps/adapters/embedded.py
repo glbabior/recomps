@@ -176,6 +176,39 @@ def as_sqft(value: Any) -> tuple[float | None, bool]:
     return amount, False
 
 
+#: Licence-number labels that trail an agent name in attribution strings.
+LICENCE_LABEL = re.compile(
+    r"\b(?:DRE|BRE|CalBRE|Lic(?:ense)?)\b", re.IGNORECASE
+)
+
+
+def _split_attribution(value: Any) -> tuple[str | None, str | None]:
+    """Pull an agent and a brokerage out of one attribution string.
+
+    Indexes pack both into a single field: "Jane Roe DRE # 01234567, Some
+    Brokerage". The obvious rule -- split on the comma -- is wrong, because a
+    brokerage is often incorporated: "Sender Realty, Inc." would yield an agent
+    called "Sender Realty" and a brokerage called "Inc.".
+
+    So the licence label decides. A name is only claimed where the string
+    actually identifies a licensee; everything else is a brokerage listing
+    itself, which is a real and common state rather than a parse failure. On
+    one observed index only six of thirty-four listings named a person at all.
+    """
+    if value in (None, ""):
+        return None, None
+    text = " ".join(str(value).split())
+    if not text:
+        return None, None
+    match = LICENCE_LABEL.search(text)
+    if match is None:
+        return None, text
+    name = text[: match.start()].strip(" .,#")
+    remainder = text[match.end():]
+    _, _, brokerage = remainder.partition(",")
+    return (name or None), (brokerage.strip() or None)
+
+
 TRANSFORMS = {
     "money": as_money,
     "date": as_date,
@@ -183,6 +216,8 @@ TRANSFORMS = {
     # Returns (sqft, derived_from_acres); `extract_records` unpacks it.
     "sqft": as_sqft,
     "text": lambda v: str(v).strip() if v not in (None, "") else None,
+    "attribution_agent": lambda v: _split_attribution(v)[0],
+    "attribution_brokerage": lambda v: _split_attribution(v)[1],
     "float": lambda v: float(v) if isinstance(v, (int, float, str)) and str(v).strip() else None,
     "raw": lambda v: v,
 }
@@ -217,6 +252,11 @@ class EmbeddedSpec:
     fields: dict[str, FieldSpec] = field(default_factory=dict)
     #: Path to a per-record property URL, made absolute against this base.
     url_base: str = ""
+    #: Dotted path to the site's own count of results for this search. When a
+    #: plugin declares it, the extraction is checked against it -- see
+    #: `_check_count`. One observed index claimed 166 properties and surfaced
+    #: nine, which reads as a quiet market rather than a broken fetch.
+    total_path: str = ""
 
     @classmethod
     def from_config(cls, raw: dict[str, Any]) -> EmbeddedSpec:
@@ -233,6 +273,7 @@ class EmbeddedSpec:
             records_path=raw.get("records_path", raw.get("data_path", "")),
             fields=fields,
             url_base=raw.get("url_base", ""),
+            total_path=raw.get("total_path", ""),
         )
 
 
@@ -240,10 +281,23 @@ class EmbeddedSpec:
 class ExtractedRecords:
     rows: list[dict[str, Any]] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
+    #: What the page said it holds, when it says so at all.
+    claimed_total: int | None = None
 
     @property
     def count(self) -> int:
         return len(self.rows)
+
+    @property
+    def is_short(self) -> bool:
+        """Whether the page claims more results than were extracted.
+
+        A page that renders a subset of its own result set is the most
+        expensive failure this adapter can have, because it does not look like
+        a failure: the run completes, the workbook builds, and the market
+        simply appears smaller than it is.
+        """
+        return self.claimed_total is not None and self.count < self.claimed_total
 
 
 def extract_records(html: str, spec: EmbeddedSpec) -> ExtractedRecords:
@@ -280,7 +334,39 @@ def extract_records(html: str, spec: EmbeddedSpec) -> ExtractedRecords:
             result.problems.append(f"record {index} has no address; skipped")
             continue
         result.rows.append(row)
+
+    _check_count(result, payload, spec)
     return result
+
+
+def _check_count(result: ExtractedRecords, payload: Any, spec: EmbeddedSpec) -> None:
+    """Compare what came out against what the page says it holds.
+
+    The cheapest guard there is against the worst failure this adapter has: a
+    page that serves a subset of its own result set. One index claimed 166
+    properties and surfaced nine, and nothing about the run looked wrong -- the
+    workbook built, the statistics computed, and the market simply appeared
+    smaller than it is. A source that agrees with itself has earned a little
+    trust; one that does not has to say so out loud.
+    """
+    if not spec.total_path:
+        return
+    claimed = dig(payload, spec.total_path)
+    if isinstance(claimed, str):
+        digits = "".join(c for c in claimed if c.isdigit())
+        claimed = int(digits) if digits else None
+    if not isinstance(claimed, int) or isinstance(claimed, bool):
+        result.problems.append(
+            f"{spec.total_path!r} did not yield a usable count, so the extraction "
+            "could not be checked against the page's own total"
+        )
+        return
+    result.claimed_total = claimed
+    if result.is_short:
+        result.problems.append(
+            f"the page claims {claimed} results but {result.count} were extracted. "
+            "Treat this page as incomplete rather than the market as small."
+        )
 
 
 def read_lot_size(record: Any, path: str) -> tuple[float | None, bool]:

@@ -27,6 +27,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from recomps.clock import local_stamp
+
 SEPARATOR = "__"
 RUNS_DIRNAME = "runs"
 SNAPSHOT_NAME = "snapshot.json"
@@ -81,7 +83,17 @@ class RunRecord:
 
     @property
     def label(self) -> str:
-        return self.run_at.strftime("%Y-%m-%d %H:%M")
+        """How this run is named on screen: local time, not the stored UTC.
+
+        The directory keeps its UTC stamp -- that is what sorts and compares.
+        This is only what a person reads.
+        """
+        return local_stamp(self.run_at)
+
+    @property
+    def local_date(self) -> str:
+        """The run's date as the person who ran it would write it."""
+        return local_stamp(self.run_at, "%Y-%m-%d")
 
 
 def _parse(directory: Path) -> RunRecord | None:
@@ -97,6 +109,28 @@ def _parse(directory: Path) -> RunRecord | None:
     except ValueError:
         return None
     return RunRecord(market=market, profile=profile, run_at=run_at, directory=directory)
+
+
+def rename_profile_runs(
+    data_dir: str | Path, market: str, old: str, new: str
+) -> int:
+    """Move a profile's archived runs to its new name. Returns how many moved.
+
+    The profile name is part of the path a run was saved under, so a rename
+    that only touched the saved profile would orphan every run of it: the
+    history would read empty and the archive would be unreachable. Moving the
+    directory is what makes a rename a rename rather than a disappearance.
+    """
+    source = profile_dir(data_dir, market, old)
+    if not source.is_dir():
+        return 0
+    target = profile_dir(data_dir, market, new)
+    if target.exists():
+        raise FileExistsError(f"{target} already holds runs")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    moved = sum(1 for child in source.iterdir() if child.is_dir())
+    source.rename(target)
+    return moved
 
 
 def list_runs(

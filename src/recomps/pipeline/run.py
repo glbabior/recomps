@@ -8,6 +8,10 @@ Order matters here in ways that are easy to get wrong:
 * Quadrant classification (F11) runs before the area table but after exclusion,
   so excluded parcels never reach a quadrant row.
 * The valuation (F5) reads unrounded rates; nothing in this module rounds.
+* The size/rate table (F12) runs after exclusion for the same reason as the
+  area table, and reports on the same sold set the statistics describe.
+* The bracket ladder (F13) runs over that same set, so its widest rung is
+  the all-sold basis the valuation reports, to the cent.
 
 Every stage is pure given its inputs, which is why the whole pipeline can be
 re-run from a snapshot without touching the network.
@@ -18,13 +22,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 
+from recomps.clock import local_date
 from recomps.config.profile import CompProfile
 from recomps.model.comp import ActiveListing, SoldComp
 from recomps.pipeline import agents as agents_mod
 from recomps.pipeline import quadrants as quad_mod
+from recomps.pipeline import size_bands as size_mod
 from recomps.pipeline import stats as stats_mod
 from recomps.pipeline.exclusions import ExclusionRecord, apply_filters
 from recomps.pipeline.guidance import Guidance, build_guidance
+from recomps.pipeline.ladder import BracketLadder, build_bracket_ladder
 from recomps.pipeline.valuation import Valuation, value_subject
 from recomps.plugin.market import Market
 from recomps.research.base import Dataset, Diagnostics, Researcher
@@ -48,6 +55,8 @@ class RunResult:
     valuation: Valuation | None = None
     guidance: Guidance | None = None
     area_table: quad_mod.AreaTable = field(default_factory=quad_mod.AreaTable)
+    size_bands: size_mod.SizeBandTable = field(default_factory=size_mod.SizeBandTable)
+    ladder: BracketLadder = field(default_factory=BracketLadder)
     agent_analysis: agents_mod.AgentAnalysis = field(default_factory=agents_mod.AgentAnalysis)
     excluded: list[ExclusionRecord] = field(default_factory=list)
     reconciled: list[str] = field(default_factory=list)
@@ -58,7 +67,12 @@ class RunResult:
 
     @property
     def pull_date(self) -> date:
-        return self.run_at.date()
+        """The day this run happened, locally.
+
+        Not `run_at.date()`: an evening run west of Greenwich is already
+        tomorrow in UTC, and every artifact would date itself a day ahead.
+        """
+        return local_date(self.run_at)
 
     @property
     def warnings(self) -> list[str]:
@@ -118,7 +132,11 @@ def analyze(
     valuation = value_subject(sold, active, profile)
     guidance = build_guidance(valuation, ratio_stats, ratios)
     area_table = quad_mod.build_area_table(sold, active, profile, geometry)
-    agent_analysis = agents_mod.analyze(sold)
+    size_bands = size_mod.build_size_band_table(sold, profile)
+    ladder = build_bracket_ladder(sold, profile)
+    agent_analysis = agents_mod.analyze(
+        sold, denominator=profile.metric.value, active=active
+    )
 
     return RunResult(
         market_name=market.name,
@@ -135,11 +153,20 @@ def analyze(
         valuation=valuation,
         guidance=guidance,
         area_table=area_table,
+        size_bands=size_bands,
+        ladder=ladder,
         agent_analysis=agent_analysis,
         excluded=filtered.excluded,
         reconciled=filtered.reconciled,
         missing_metric=filtered.missing_metric,
-        caveats=stats_mod.Caveats.build(sold, sold_side).notes,
+        caveats=(
+            stats_mod.Caveats.build(sold, sold_side).notes
+            + [
+                f"{note}. Kept as separate sales -- one street address can carry more "
+                "than one parcel, and merging them would delete a real sale."
+                for note in filtered.distinct_at_one_address
+            ]
+        ),
         diagnostics=dataset.diagnostics,
         researcher=researcher_name,
     )

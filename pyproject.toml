@@ -26,8 +26,10 @@ dependencies = [
 live = ["anthropic>=1.0", "httpx2>=0.1"]
 dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.6"]
 # The interface. Kept optional so the engine, the CLI and the whole test
-# suite install and run without it.
-ui = ["streamlit>=1.40"]
+# suite install and run without it. pandas arrives with Streamlit anyway, but
+# the interface imports it directly to colour table rows, so it is declared
+# rather than relied on as somebody else's transitive dependency.
+ui = ["streamlit>=1.40", "pandas>=1.4"]
 
 [project.scripts]
 recomps = "recomps.cli:main"

@@ -42,6 +42,56 @@ class FilterResult:
     reconciled: list[str] = field(default_factory=list)
     #: Rows that were the same property listed twice by a source.
     duplicates: list[str] = field(default_factory=list)
+    #: Addresses carrying more than one genuine sale. Reported, because it looks
+    #: exactly like a duplicate and must not be quietly treated as one.
+    distinct_at_one_address: list[str] = field(default_factory=list)
+
+
+#: Two rows priced within this of each other are the same transaction listed
+#: twice. Observed duplicates have landed a single dollar apart; genuinely
+#: different parcels at one address were hundreds of thousands apart.
+SAME_PRICE_TOLERANCE = 0.005
+#: Sizes differing by more than this are different pieces of land, whatever the
+#: address says.
+SAME_SIZE_TOLERANCE = 0.05
+
+
+def _completeness(comp: Comp) -> int:
+    """How many of the fields the analysis needs this row actually carries."""
+    return sum(
+        1
+        for v in (
+            comp.lot_sqft, comp.living_sqft, comp.brokerage, comp.agent,
+            getattr(comp, "final_list_price", None), getattr(comp, "sold_date", None),
+            comp.lat,
+        )
+        if v is not None
+    )
+
+
+def _close(a: float | None, b: float | None, tolerance: float) -> bool | None:
+    """Whether two figures agree, or None when one of them is missing."""
+    if a is None or b is None:
+        return None
+    if a == b:
+        return True
+    largest = max(abs(a), abs(b))
+    return largest > 0 and abs(a - b) / largest <= tolerance
+
+
+def _same_sale(a: SoldComp, b: SoldComp) -> bool:
+    """Whether two rows at one address describe one transaction.
+
+    Price decides, because that is the field sources agree on -- recording date
+    and close of escrow routinely differ, and one observed source was 18 days
+    out. Size breaks the tie when price is unknown. When neither can be
+    compared the rows are treated as the same sale, which preserves the
+    original behaviour for the MLS-suffix case this was written for.
+    """
+    priced = _close(a.sold_price, b.sold_price, SAME_PRICE_TOLERANCE)
+    if priced is False:
+        return False
+    return _close(a.lot_sqft, b.lot_sqft, SAME_SIZE_TOLERANCE) is not False
 
 
 def _exclusion_reason(comp: Comp, profile: CompProfile) -> str | None:
@@ -70,26 +120,36 @@ def apply_filters(
     # Deduplicate the sold side before anything else. A source can list one
     # sale twice -- once bare and once with an MLS lot suffix -- and counting
     # it twice would shift every statistic downstream.
-    seen: dict[AddressKey, SoldComp] = {}
+    #
+    # But a shared street address is not proof of a shared sale. Two genuinely
+    # different parcels can carry one address (observed: a 3.9-acre and a
+    # 5.14-acre parcel at the same address, listed at different prices), and
+    # collapsing those deletes a real sale from every statistic without a
+    # trace. So the address selects candidates and the *price* decides, which
+    # is the same rule the verification pass uses.
+    groups: dict[AddressKey, list[SoldComp]] = {}
     for comp in sold:
-        key = comp.key_for(identification)
-        previous = seen.get(key)
-        if previous is None:
-            seen[key] = comp
-            continue
-        # Keep whichever row carries more of the fields we need.
-        def completeness(c: SoldComp) -> int:
-            return sum(
-                1 for v in (c.lot_sqft, c.living_sqft, c.brokerage, c.agent,
-                            c.final_list_price, c.sold_date, c.lat)
-                if v is not None
-            )
-        if completeness(comp) > completeness(previous):
-            seen[key] = comp
-        result.duplicates.append(comp.address)
-    sold = list(seen.values())
+        groups.setdefault(comp.key_for(identification), []).append(comp)
 
-    sold_keys = set(seen)
+    deduped: list[SoldComp] = []
+    for members in groups.values():
+        kept: list[SoldComp] = []
+        for comp in members:
+            twin = next((k for k in kept if _same_sale(k, comp)), None)
+            if twin is None:
+                kept.append(comp)
+                continue
+            if _completeness(comp) > _completeness(twin):
+                kept[kept.index(twin)] = comp
+            result.duplicates.append(comp.address)
+        if len(kept) > 1:
+            result.distinct_at_one_address.append(
+                f"{kept[0].address}: {len(kept)} distinct sales share this address"
+            )
+        deduped.extend(kept)
+    sold = deduped
+
+    sold_keys = set(groups)
     for comp in sold:
         reason = _exclusion_reason(comp, profile)
         if reason:

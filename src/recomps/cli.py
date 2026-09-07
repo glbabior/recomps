@@ -692,6 +692,12 @@ def _report(result, workbook_path, methodology_path, archive_dir) -> None:
     if result.reconciled:
         click.echo(f"  reconciled     {len(result.reconciled)} listing(s) had already closed")
     diagnostics = result.diagnostics
+    # What the run could not see changes every figure above it, so it prints
+    # with them rather than only in the write-up.
+    for note in diagnostics.not_found:
+        click.secho(f"  ! {note}", fg="yellow")
+    for failure in diagnostics.sources_failed:
+        click.secho(f"  ! source unavailable: {failure}", fg="yellow")
     if diagnostics.llm_calls:
         click.echo(f"  llm            {diagnostics.llm_calls} calls, "
                    f"{diagnostics.input_tokens:,} in / {diagnostics.output_tokens:,} out"
@@ -770,7 +776,9 @@ def render(market, market_path, profile, run_label, out, exclude, subject_size) 
         if not records:
             _fail(f"no saved runs for profile {profile_name!r}; run one first")
         if run_label != "last":
-            records = [r for r in records if r.run_at.strftime("%Y-%m-%d") == run_label]
+            # Matched against the date the interface *shows*, or "--run
+            # 2026-08-04" would miss the run listed under that date.
+            records = [r for r in records if r.local_date == run_label]
             if not records:
                 _fail(f"no saved run of {profile_name!r} dated {run_label}")
         record = records[0]
@@ -855,6 +863,169 @@ def _open_when_ready(url: str, timeout: float = 30.0) -> None:
     threading.Thread(target=wait_then_open, daemon=True).start()
 
 
+def _instance_record() -> Path:
+    from recomps.config.store import config_dir
+
+    return config_dir() / "ui-instance.json"
+
+
+def _streamlit_is_serving(port: int, timeout: float = 0.4) -> bool:
+    """Whether *a Streamlit server* is answering on this port.
+
+    Streamlit's health endpoint is the check rather than a bare socket connect,
+    because "something has this port" is not evidence that the something is
+    ours.
+    """
+    import urllib.error
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(
+            f"http://localhost:{port}/_stcore/health", timeout=timeout
+        ) as response:
+            return response.status == 200
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
+
+
+def _is_our_process(pid: int) -> bool:
+    """Whether `pid` is a live Python process.
+
+    PIDs are reused. A stale record naming a PID that now belongs to something
+    else must never be enough to kill it, so the recorded PID is corroborated
+    against the running image name before anything is terminated. This is a
+    guard, not a proof of identity -- which is why the caller also requires a
+    Streamlit to be answering on the recorded port.
+    """
+    import subprocess
+
+    try:
+        output = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+            capture_output=True, text=True, timeout=10, check=False,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return "python" in output.lower() and str(pid) in output
+
+
+def _pid_listening_on(port: int) -> int | None:
+    """The PID holding `port`, when the system will say.
+
+    The recorded PID is the first choice, but it only exists for instances this
+    version launched -- and the interface someone already has open when they
+    upgrade is exactly the one in the way. Asking the system who holds the port
+    covers that, and covers a record lost to a crash.
+    """
+    import subprocess
+
+    try:
+        output = subprocess.run(
+            ["netstat", "-ano", "-p", "TCP"],
+            capture_output=True, text=True, timeout=15, check=False,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) < 5 or parts[3].upper() != "LISTENING":
+            continue
+        local = parts[1]
+        # Split on the last colon: IPv6 locals are bracketed but still colonful.
+        host, _, listening_port = local.rpartition(":")
+        if listening_port != str(port):
+            continue
+        if host.strip("[]") not in ("127.0.0.1", "0.0.0.0", "::1", "::"):
+            continue
+        try:
+            return int(parts[4])
+        except ValueError:
+            return None
+    return None
+
+
+def _stop_previous_instance(port: int) -> bool:
+    """Stop an interface this program left running. Returns True if it did.
+
+    Someone who launches from a desktop shortcut has no terminal to press
+    Ctrl+C in, so the old server keeps the port and the new launch cannot bind
+    it -- with the error going to a console nobody is looking at. Clearing the
+    port here is what makes relaunching the only control they need.
+
+    Two candidates are considered, because neither alone is reliable. The
+    recorded PID is the process this program started, but `python -m streamlit`
+    does not always hold the socket itself -- observed on Windows, where the
+    listener was a child. The port's owner is the process actually in the way,
+    but it is unrecorded for an interface opened before this existed. Both are
+    tried, and each has to be a live Python process before it is signalled.
+
+    Deliberately narrow: nothing is killed unless a Streamlit is answering on
+    the port we are about to bind.
+    """
+    import json
+    import os
+    import signal
+
+    record = _instance_record()
+    recorded: int | None = None
+    saved_port: int | None = None
+    if record.is_file():
+        try:
+            saved = json.loads(record.read_text(encoding="utf-8"))
+            recorded = int(saved["pid"])
+            saved_port = int(saved["port"])
+        except (json.JSONDecodeError, OSError, KeyError, TypeError, ValueError):
+            recorded = saved_port = None
+
+    # A record for another port is another instance, deliberately started with
+    # --port. Leave it alone.
+    if saved_port is not None and saved_port != port:
+        return False
+
+    if not _streamlit_is_serving(port):
+        # Nothing is listening; any record is stale.
+        record.unlink(missing_ok=True)
+        return False
+
+    candidates = []
+    for pid in (_pid_listening_on(port), recorded if saved_port == port else None):
+        if pid and pid != os.getpid() and pid not in candidates and _is_our_process(pid):
+            candidates.append(pid)
+    if not candidates:
+        return False
+
+    stopped = False
+    for pid in candidates:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            stopped = True
+        except (OSError, ValueError):
+            continue
+    if not stopped:
+        return False
+
+    # Give the port time to come free before the new server tries to bind it.
+    for _ in range(40):
+        if not _streamlit_is_serving(port, timeout=0.2):
+            break
+        time.sleep(0.1)
+    record.unlink(missing_ok=True)
+    return True
+
+
+def _remember_instance(pid: int, port: int) -> None:
+    """Record the running interface so the next launch can replace it."""
+    import json
+
+    record = _instance_record()
+    try:
+        record.parent.mkdir(parents=True, exist_ok=True)
+        record.write_text(json.dumps({"pid": pid, "port": port}), encoding="utf-8")
+    except OSError:
+        # Only costs the next launch its tidy-up; never a reason not to start.
+        pass
+
+
 def _silence_streamlit_onboarding() -> None:
     """Stop Streamlit asking for an email address on first launch.
 
@@ -916,16 +1087,22 @@ def ui(market, market_path, port) -> None:
         "--global.developmentMode", "false",
     ]
 
+    if _stop_previous_instance(port):
+        click.echo("Stopped the interface that was already running.")
+
     click.secho(f"REComps is starting at {url}", bold=True)
     click.echo("Your browser should open. Press Ctrl+C here to stop it.")
     click.echo("")
 
     process = subprocess.Popen(command)
+    _remember_instance(process.pid, port)
     _open_when_ready(url)
     try:
         process.wait()
     except KeyboardInterrupt:
         process.terminate()
+    finally:
+        _instance_record().unlink(missing_ok=True)
     click.echo("Stopped.")
 
 

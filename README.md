@@ -31,6 +31,8 @@ This project began as a research process run by hand, three times, with an AI as
 
 A workbook of five sheets: **Summary**, **Pricing Guidance**, **Sold Comps**, **Active Listings**, **Agents**.
 
+Most of the work lands on the Summary. It carries four valuation bases side by side, a bracket ladder showing how the estimate moves as "similar size" widens from tight to the whole market, a size/rate table splitting sales into equal-count bands so the size premium is read off a column rather than assumed, a by-area table for the four quadrants of the market with size reported beside every rate, the sold-to-ask distribution, and a core view that recomputes the headline figures with the extremes set aside. **Pricing Guidance** turns that into three list-price strategies and a walk-away floor. **Agents** lists the people who actually closed these sales — their volume, their average sold-to-ask ratio, the rate they achieved, and the median parcel size they achieved it on — grouped into brokerage families, as a shortlist to interview rather than a ranking.
+
 Everything in it is a live formula. The Summary's median $/sqft is `=MEDIAN('Sold Comps'!E2:E47)`, not a number that was true when the file was written. Delete a comp you don't believe, correct a lot size the aggregator rounded, type a different size for your own property into the yellow cell — and the valuation, the pricing strategies, and the walk-away floor all move. The workbook is a model, not a report.
 
 Alongside it: a JSON snapshot of every row and statistic, and a methodology document describing what the run actually did, so a future run — by this tool or by a person with an AI assistant — can reproduce or challenge it.
@@ -44,8 +46,10 @@ fallible step runs last against only what is left.
 ```
   market plugin          1. BACKBONE  — deterministic, free
   (geometry,      ──▶    read each index page's own embedded JSON
-   sources,              → every sale, with coordinates and property URLs
-   subject)                              │
+   sources,              → sales and current listings, with coordinates
+   subject)                 and property URLs; each source declares
+                            which side of the market it describes
+                                         │
                                          ▼
                          2. IDENTIFY — keep what matches the profile's
                             property type (its own label beats a heuristic)
@@ -71,7 +75,7 @@ fallible step runs last against only what is left.
                                         │
                                         ▼
               DATASET ──▶ exclusions ▸ statistics ▸ valuation ▸ guidance
-                          ▸ quadrants ▸ agents        (all deterministic)
+                          ▸ size bands ▸ quadrants ▸ agents  (deterministic)
                                         │
                                         ▼
                      workbook  ·  snapshot  ·  methodology
@@ -105,11 +109,13 @@ These are real failures from real runs, and the reason each guard exists.
 |---|---|---|
 | **The naming-grid trap** | An address labelled `88 E Chandler St` sits *west* of the north–south divider. The town's E/W street-naming grid splits at a different avenue than the one used as the analytical divider. | Quadrants are assigned from geocoded coordinates. Street-name directionals are never read. |
 | **The straight-line trap** | The divider arterial curves. Classifying against a single latitude misplaces parcels at the edges of the market. | The divider is a piecewise-linear centerline of geocoded intersections; a parcel is compared against the latitude interpolated at *its own* longitude. |
-| **The phantom page** | A fetched search page renders only its first seven or eight results server-side. The rest is JavaScript. A fetcher sees a complete-looking page that is missing most of the data. | Cross-check against a second source; a count that disagrees is a diagnostic, not a rounding error. |
+| **The phantom page** | A fetched search page renders only its first seven or eight results server-side. The rest is JavaScript. A fetcher sees a complete-looking page that is missing most of the data. One index claimed 166 properties and served nine. | The page is checked against *itself*: a source declares where it states its own result count, and an extraction short of that is reported as an incomplete page rather than a small market. Cross-checking a second source remains the backstop. |
 | **The stale attribution** | A property page attributes the listing agent of a transaction from decades ago. | Every attribution is verified against the known sale price and date before it is accepted. |
 | **The rounded acre** | An aggregator publishes acreage to two decimals. On a 5,000 sqft parcel that is ±4% of the $/sqft. | Rounded sizes are flagged and the caveat travels with the statistics. |
 | **The closed "active" listing** | An index still lists a property as for sale days after it closed, inflating both sides of the market. | Reconciliation moves it to the sold side and notes the move. |
 | **The lot number that looks like a flat** | MLS records append a lot number to parcel addresses, so one sale appears both bare and suffixed — twice on one page, in one case a dollar apart. Counted twice, it shifts every statistic. | Address identity is profile-aware: a condo's `#2` is its identity, a parcel's `#18` is an artifact. Duplicates collapse into whichever row carries more, and the merge is reported. |
+| **Two parcels, one address** | The opposite failure, and worse. A 3.9-acre and a 5.14-acre parcel were listed at one street address, two hundred thousand dollars apart. Collapsing them as a duplicate deletes a real sale from every statistic and leaves no trace. | The address only selects candidates; **price decides**, with size breaking the tie. Genuinely distinct sales at one address are both kept and the sharing is reported. |
+| **The brokerage that becomes a person** | An index packs both sides into one string. Splitting `Sender Realty, Inc.` on its comma invents an agent called *Sender Realty* working for a firm called *Inc.* | The comma is not the seam. A name is claimed only where a licence label (`DRE #`, `CalBRE`) says a person is actually named; everything else is a firm listing itself. |
 | **The agent who is not a person** | A property page named a buyer's agent: *Out Of Area Out Of Area*. It is MLS filler for "nobody", and it reads exactly like a name — it would have earned closings and a ranking in the agent table. | Placeholder names are recognised and rejected with a reason, rather than becoming a person. |
 | **The challenge page served as success** | A site answers an automated request with HTTP 200 and a "verify you are human" page. Read as content, it yields no listings — a silent zero that looks like a quiet market. | Response bodies are checked for challenge markers before being treated as results. |
 
@@ -119,11 +125,17 @@ These are real failures from real runs, and the reason each guard exists.
 
 **The similar-size bracket is the primary anchor.** Because smaller parcels carry a higher rate, the valuation that matters is the average $/sqft of *sales near your own size*, not the market's. Four bases are reported side by side rather than blended — similar-size average (primary), all-sold median, all-sold average, and active-listing median — because the spread between them is information.
 
+**The bandwidth of that bracket is shown, not buried.** "Near your own size" is a number somebody picked, and the answer moves with it — on one real run the estimate shifted nearly ten percent between a tight reading of that word and the pinned one, which is a large answer to a question the output never asked out loud. So every run reports the whole curve rather than one point on it: nested size ranges centred on the subject, from tight out to the entire market, each with its own sample count and rate. Reading the count down that column is reading the price of relevance — a tighter range is more relevant and thinner, a wider one better evidenced and more diluted. The widest rung is every sale in the market, which is exactly the all-sold basis reported elsewhere. Widening the bracket to everything does not produce a better similar-size estimate, it produces the market average, which is a different claim.
+
+**The size premium is measured, not assumed.** The bracket above exists because smaller parcels carry a higher rate — so every run reports the evidence for that claim rather than resting on it. Sales are split into size bands, and each band's median $/sqft sits beside its median size, which turns the premise into a column you read. Bands hold equal *counts*, not equal widths: round edges (5–10k, 10–15k) put nineteen sales in one band and one in the next, where a single view lot becomes an entire "trend". No band is thinner than three sales, because below that a median is an anecdote, and the band count steps down rather than printing rows that cannot support a reading. The run states the spread between the smallest and largest band as a percentage — and when a market does *not* show the premium, it says that instead. That is the assumption the primary valuation rests on, and its absence is worth more than a silent chart.
+
+**The core view is a second reading, not a filter.** Two $/sqft bounds produce a parallel set of figures with the extremes set aside, so the gap between headline and core shows how much one anomaly is moving things. Nothing is removed from the data by it — the sales stay in the counts, the sheets, and the medians. In the workbook the bounds are editable cells and the core count and average recompute from them, because the question is asked by moving them.
+
 **Nothing is rounded before it is used.** Every valuation multiplies an unrounded rate by a size. Rounding $/sqft to the two decimals that get displayed shifts the resulting valuation by tens of dollars, and quietly breaks any regression test built on real numbers.
 
 **List price is bait, not a ceiling.** In this market the sold-to-ask distribution has two tails: under-priced listings get bid up well above ask, while over-priced ones take serial cuts and still close below the reduced ask. That is why the recommended strategy prices just under a search-band edge — buyers filter by price band, and reaching the band below costs less than it appears to.
 
-**Size is shown next to rate, always.** A quadrant can carry higher absolute prices *and* a lower average $/sqft purely because its parcels are larger. Without the size column beside it, a naive rate comparison inverts the real premium.
+**Size is shown next to rate, always.** Every table that reports a rate reports the size that produced it. A quadrant can carry higher absolute prices *and* a lower average $/sqft purely because its parcels are larger; without the size column beside it, a naive rate comparison inverts the real premium.
 
 **The agent analysis is a shortlist to interview, not a ranking.** Samples are one to three sales per agent. A high sold-to-ask ratio can reflect a deliberately low list price as much as skill. The recommended interview test is in the workbook: ask each candidate for a list price *and* an expected close, before showing them your numbers.
 
@@ -243,15 +255,41 @@ The interface is careful about one distinction the engine makes and a screen eas
 
 It is also explicit about who pays before a run starts, since the reading is charged either to a Claude subscription or to a metered API account.
 
+It assumes no terminal. The market you last opened is reopened at launch, so a private market's path is typed once and not again. A folder browser reaches the ones that were never typed, and marks which folders actually hold a `market.toml` rather than leaving you to recognise a name — something a native folder dialog cannot do. Launching again replaces an interface already running instead of failing to bind its port, which is the whole recovery procedure for someone starting the program from a shortcut. Streamlit's own Deploy button is removed: it publishes to a public cloud, and on a tool whose premise is that a real market's data stays on one machine, that is a one-click mistake with no legitimate use.
+
+Anything the run set aside is visible where the figures are. Parcels excluded by the search's rules are listed with the reason for each, because a run that quietly drops two parcels reports a smaller, tidier market that reads exactly like a real one. The core view — the same sales read again with extreme rates set aside — is on the screen beside the headline it qualifies, rather than only in a document nobody opens.
+
+Sold comps and current listings get **separate tables**. An asking price is a claim and a sale is a fact, and one table with a status column invites reading the first as the second. Beside them sit rate by size band, rate by area, and the agents.
+
+The agent table is a shortlist to interview and reads like a ranking, so it carries what stops it being one. Sold-to-ask is shown as a signed distance from ask, and next to it the **rate the agent actually achieved** — because beating a low ask is not the same as getting a good price — and next to *that* the average size it was achieved on, since a rate looks better on smaller parcels. Live listing counts sit beside closings: they answer different questions, and an agent working this market now with nothing closed here yet still appears. Shortlisted agents are tinted, and their sales carry the same tint in the sold and listing tables, so one person can be traced across all three by eye. Colour is never the only cue; the name is in every table regardless.
+
+The interface offers no choice of data source, and that is the point. A market
+with live sources is researched; one without replays the recording it ships.
+Its run history lists only runs that fetched from the web. Offering both as a
+toggle invited comparing yesterday's market against a recording frozen months
+earlier — different sales over different dates — and reading the difference as
+the tool being unstable. The recording still exists and still backs every test;
+it is simply not a decision anyone makes on a screen.
+
+Because a window is a request and not a promise, every run says what it
+actually found: *"Window 2026-05-18 to 2026-09-05. Sales found run 2026-07-02
+to 2026-09-03. The first 45 days of the window returned nothing."* An index
+serves its most recent page of sales and will not reach further back because
+the window widened. A sale nobody published looks exactly like a sale that did
+not happen, and the two are worth telling apart.
+
+Run times are shown in local time. They are stored, named and compared in UTC — a local stamp does not sort across a daylight-saving boundary and does not mean the same thing on another machine — but an evening run is already tomorrow in UTC, so a screen that reports the stored date is telling the reader something false about their own week.
+
 ## Where this is now
 
 Working, in daily-usable shape, with limits worth stating plainly.
 
 **Solid.** The whole deterministic analysis — exclusions, statistics, the
-four valuation bases, pricing strategies, sold-to-ask, quadrants, agents —
-reproduces a real hand-run analysis to the dollar. The workbook, snapshots,
-run history and reopening are done. The interface covers everything the
-command line does. 220 tests, all offline; a live run needs no test to pass.
+four valuation bases, pricing strategies, sold-to-ask, size bands, quadrants,
+agents — reproduces a real hand-run analysis to the dollar. The workbook,
+snapshots, run history and reopening are done. The interface covers everything
+the command line does. 334 tests, all offline; a live run needs no test to
+pass.
 
 **Working, with caveats.** Live research runs end to end against real sites
 and attributed 95% of sales on its last full run. It is one market's worth of
@@ -261,10 +299,17 @@ not permanent facts.
 
 **Known gaps.**
 
-- *No active listings.* The source that carried them now refuses this tool's
-  requests. That costs the asking-price valuation basis and the best agent
-  attribution. Going around a block is not on the table, so this needs either
-  a different source or a browser session the owner drives.
+- *A live run reaches back only as far as its sources publish.* An index
+  serves its most recent page — on one market about nine weeks — so a longer
+  window returns nothing extra and says so. Reaching further back needs
+  pagination, which no adapter implements yet.
+- *Active listings are coarser than the sold side.* Recorded runs are
+  unaffected — a saved dataset keeps whatever it captured. On a live run the
+  original active source now refuses this tool's requests, and the replacement
+  gives rounded acreage rather than exact square footage, on a partial subset
+  of its listings. Asking prices, coordinates and agent attribution all still
+  arrive complete; the active-median $/sqft basis rests on the smaller, coarser
+  sample, and says so. Sizes are flagged as rounded wherever they travel.
 - *Improved-property profiles are unproven.* Houses and condos are wired
   through the entire pipeline and tested structurally, but no real run has
   validated their identification heuristics. They ship marked experimental and
@@ -316,8 +361,25 @@ and the street-name trap; bracket selection; sold-to-ask arithmetic; brokerage
 grouping; address identity under both profile rules; the verification pass
 accepting a drifted date but rejecting a decades-old sale; that no workbook
 formula names a column letter; that a non-land profile genuinely reshapes the
-sheet; that opening a saved run recomputes nothing; and that the interface
-binds to localhost only.
+sheet; that opening a saved run recomputes nothing; that size bands hold
+comparable samples and that a sale with no size is counted rather than dropped;
+that the core view's workbook figures are formulas over its editable bounds
+rather than values; that two genuinely different parcels at one street address
+survive deduplication while the MLS-suffix duplicate still collapses; that an
+index short of its own claimed count is reported as incomplete; that an
+attribution string is only split where a licence label names a person; that a
+run is labelled in local time while its archive stays UTC; that a market
+plugin's folder is remembered between launches; and that the interface binds to
+localhost only.
+
+Two of those exist because something was wrong and nothing said so. Saving an
+edited search wrote to a widget's key after the widget had been drawn, which
+Streamlit refuses, so editing any existing search raised — covered now by a
+test checked the only way a regression test can be, by putting the bug back and
+watching it fail. The deduplication bug was quieter and worse: two real parcels
+sharing an address were merged, and one sale left the dataset without a
+warning, a diagnostic, or any visible sign. Both were found by testing a claim
+from outside the codebase against the code, rather than by reading it.
 
 ## Built with Claude
 

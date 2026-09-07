@@ -57,6 +57,29 @@ def save_user_profile(market_name: str, profile: CompProfile) -> Path:
     return path
 
 
+def rename_user_profile(market_name: str, old: str, new: str) -> bool:
+    """Rename a saved search. Returns False if there was nothing to rename.
+
+    Only a profile the *user* saved can be renamed. One the market plugin ships
+    belongs to the market definition: renaming it here would leave the original
+    still in `market.toml` and a copy under the new name, which is two searches
+    where the user asked for one.
+    """
+    path = profiles_path(market_name)
+    if not path.is_file():
+        return False
+    existing = json.loads(path.read_text(encoding="utf-8"))
+    if old not in existing:
+        return False
+    if new in existing:
+        raise ValueError(f"a saved search named {new!r} already exists")
+    profile = existing.pop(old)
+    profile["name"] = new
+    existing[new] = profile
+    path.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+    return True
+
+
 def delete_user_profile(market_name: str, name: str) -> bool:
     """Remove a saved profile. Returns False if there was nothing to remove.
 
@@ -117,4 +140,51 @@ def resolve_profile(market: Market, name: str | None) -> CompProfile:
     raise KeyError(
         f"unknown profile {name!r} for market {market.name!r}; available: {known}. "
         "Run `recomps profiles new` to create one."
+    )
+
+
+# ---------------------------------------------------------------------------
+# The last market opened
+# ---------------------------------------------------------------------------
+#
+# A private market is used from a folder, and typing its path at every launch
+# is friction the interface should not impose. Only the *choice* is remembered
+# -- a name or a path -- never anything about the market itself, so this file
+# stays safe to sit in a config directory that is not private.
+
+
+def recent_path() -> Path:
+    return config_dir() / "recent-market.json"
+
+
+def remember_market(choice: str | None, path: str | None) -> None:
+    """Record which market was last opened, so the next launch can reopen it."""
+    target = recent_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        json.dumps({"choice": choice, "path": path}, indent=2), encoding="utf-8"
+    )
+
+
+def last_market() -> tuple[str | None, str | None]:
+    """The last market opened, as ``(choice, path)``. Both None if unknown.
+
+    A corrupt or unreadable file is treated as "nothing remembered" rather than
+    an error: this is a convenience, and it must never be the reason the
+    interface will not start.
+    """
+    target = recent_path()
+    if not target.is_file():
+        return None, None
+    try:
+        raw = json.loads(target.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None, None
+    if not isinstance(raw, dict):
+        return None, None
+    choice = raw.get("choice")
+    path = raw.get("path")
+    return (
+        choice if isinstance(choice, str) else None,
+        path if isinstance(path, str) else None,
     )

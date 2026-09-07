@@ -322,3 +322,135 @@ def test_a_stored_view_needs_no_market_plugin(result, tmp_path):
     path = build_snapshot(result).write(tmp_path / "snap.json")
     stored = reopen_mod.read_stored_path(str(path))
     assert stored.primary_value and stored.sold
+
+
+# ---------------------------------------------------------------------------
+# Local time on screen, UTC on disk
+# ---------------------------------------------------------------------------
+#
+# A run started at half past ten on a Friday evening in California is already
+# Saturday in UTC. Labelling it Saturday tells the reader something false about
+# their own week, and the date is what they use to find the run again.
+
+
+def test_a_run_is_labelled_in_local_time():
+    from pathlib import Path
+
+    from recomps.clock import to_local
+
+    when = datetime(2026, 9, 5, 5, 30, tzinfo=UTC)
+    record = history_mod.RunRecord(
+        market="m", profile="p", run_at=when, directory=Path("x")
+    )
+    assert record.label == to_local(when).strftime("%Y-%m-%d %H:%M")
+    assert record.local_date == to_local(when).strftime("%Y-%m-%d")
+
+
+def test_the_archive_directory_stays_utc():
+    """Local stamps do not sort across a daylight-saving boundary, and a run
+    has to mean the same thing on another machine."""
+    when = datetime(2026, 9, 5, 5, 30, tzinfo=UTC)
+    directory = history_mod.run_dir("/data", "m", "p", when)
+    assert directory.name == "20260905T053000Z"
+
+
+def test_a_run_is_found_by_the_date_it_is_listed_under(tmp_path, result):
+    """`--run <date>` has to match what history printed, not the UTC date."""
+    when = datetime(2026, 9, 5, 5, 30, tzinfo=UTC)
+    directory = history_mod.run_dir(tmp_path, "demoville", "demo-lots", when)
+    directory.mkdir(parents=True)
+    build_snapshot(result).write(directory / history_mod.SNAPSHOT_NAME)
+
+    record = history_mod.list_runs(tmp_path)[0]
+    assert record.local_date == record.label[:10]
+    assert record.directory.name.startswith("20260905")
+
+
+def test_the_workbook_dates_itself_by_the_local_day(result):
+    from recomps.clock import local_date
+
+    assert result.pull_date == local_date(result.run_at)
+
+
+def test_a_naive_stamp_is_read_as_utc_not_as_local():
+    """Everything this project stores is UTC. Guessing local for a stored stamp
+    would silently shift every archived run by the offset."""
+    from recomps.clock import to_local
+
+    naive = datetime(2026, 9, 5, 5, 30)
+    aware = datetime(2026, 9, 5, 5, 30, tzinfo=UTC)
+    assert to_local(naive) == to_local(aware)
+
+
+def test_an_unparseable_stamp_does_not_break_a_label():
+    from recomps.model.snapshot import Snapshot
+
+    snapshot = Snapshot(
+        schema_version=1, payload={"run": {"market": "m", "run_at": "not a date"}}
+    )
+    assert snapshot.local_date == "not a date"[:10]
+
+
+# ---------------------------------------------------------------------------
+# Renaming a search takes its past runs with it
+# ---------------------------------------------------------------------------
+
+
+def test_renaming_moves_the_archived_runs_too(config_dir, tmp_path, result):
+    """The name is part of the path a run was saved under. A rename that only
+    touched the profile would orphan every run of it."""
+    from recomps.config.store import rename_user_profile, save_user_profile
+
+    save_user_profile("demoville", _profile("old-name"))
+    when = datetime(2026, 8, 31, tzinfo=UTC)
+    directory = history_mod.run_dir(tmp_path, "demoville", "old-name", when)
+    directory.mkdir(parents=True)
+    build_snapshot(result).write(directory / history_mod.SNAPSHOT_NAME)
+
+    moved = history_mod.rename_profile_runs(tmp_path, "demoville", "old-name", "new-name")
+    assert moved == 1
+    assert rename_user_profile("demoville", "old-name", "new-name")
+
+    assert not history_mod.list_runs(tmp_path, "demoville", "old-name")
+    kept = history_mod.list_runs(tmp_path, "demoville", "new-name")
+    assert len(kept) == 1 and kept[0].snapshot is not None
+    saved = load_user_profiles("demoville")
+    assert "new-name" in saved and "old-name" not in saved
+    assert saved["new-name"].name == "new-name"
+
+
+def test_a_rename_onto_an_existing_name_is_refused(config_dir, tmp_path, result):
+    from recomps.config.store import rename_user_profile, save_user_profile
+
+    save_user_profile("demoville", _profile("one"))
+    save_user_profile("demoville", _profile("two"))
+    with pytest.raises(ValueError):
+        rename_user_profile("demoville", "one", "two")
+    assert set(load_user_profiles("demoville")) == {"one", "two"}
+
+
+def test_a_rename_onto_an_existing_archive_is_refused(tmp_path, result):
+    when = datetime(2026, 8, 31, tzinfo=UTC)
+    for name in ("one", "two"):
+        d = history_mod.run_dir(tmp_path, "demoville", name, when)
+        d.mkdir(parents=True)
+        build_snapshot(result).write(d / history_mod.SNAPSHOT_NAME)
+    with pytest.raises(FileExistsError):
+        history_mod.rename_profile_runs(tmp_path, "demoville", "one", "two")
+    assert history_mod.list_runs(tmp_path, "demoville", "one")
+
+
+def test_renaming_a_search_with_no_runs_is_fine(config_dir, tmp_path):
+    from recomps.config.store import rename_user_profile, save_user_profile
+
+    save_user_profile("demoville", _profile("lonely"))
+    assert history_mod.rename_profile_runs(tmp_path, "demoville", "lonely", "renamed") == 0
+    assert rename_user_profile("demoville", "lonely", "renamed")
+
+
+def test_a_market_s_own_search_cannot_be_renamed(config_dir):
+    """It belongs to the market definition; renaming here would leave the
+    original in place and a copy beside it."""
+    from recomps.config.store import rename_user_profile
+
+    assert rename_user_profile("demoville", "demo-lots", "mine") is False

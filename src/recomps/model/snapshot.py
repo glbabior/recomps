@@ -37,7 +37,23 @@ class Snapshot:
     @property
     def label(self) -> str:
         run = self.payload.get("run", {})
-        return f"{run.get('market', '?')} {self.run_at[:10]}"
+        return f"{run.get('market', '?')} {self.local_date}"
+
+    @property
+    def local_date(self) -> str:
+        """The stored stamp is UTC; a reader wants the day it happened here.
+
+        An unparseable stamp falls back to its first ten characters rather than
+        raising: a label is not worth failing a run over.
+        """
+        from datetime import datetime
+
+        from recomps.clock import local_stamp
+
+        try:
+            return local_stamp(datetime.fromisoformat(self.run_at), "%Y-%m-%d")
+        except ValueError:
+            return self.run_at[:10]
 
     def to_json(self) -> str:
         return json.dumps(
@@ -95,6 +111,8 @@ def build_snapshot(result: Any) -> Snapshot:
         "valuation": result.valuation.to_dict() if result.valuation else None,
         "guidance": result.guidance.to_dict() if result.guidance else None,
         "areas": result.area_table.to_dict(),
+        "size_bands": result.size_bands.to_dict(),
+        "ladder": result.ladder.to_dict(),
         "agents": result.agent_analysis.to_dict(),
         "excluded": [{"address": e.address, "reason": e.reason} for e in result.excluded],
         "reconciled": result.reconciled,

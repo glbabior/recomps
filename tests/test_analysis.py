@@ -23,6 +23,8 @@ from recomps.pipeline import quadrants as quad
 from recomps.pipeline.agents import analyze as analyze_agents
 from recomps.pipeline.agents import brokerage_family
 from recomps.pipeline.exclusions import apply_filters, in_core_view
+from recomps.pipeline.ladder import build_bracket_ladder
+from recomps.pipeline.size_bands import MIN_BAND, build_size_band_table
 from recomps.pipeline.stats import sold_stats, sold_to_ask
 from recomps.pipeline.valuation import similar_size_comps, value_subject
 from recomps.plugin.market import MarketGeometry, Waypoint
@@ -452,3 +454,459 @@ def test_a_suffixed_listing_reconciles_against_a_bare_sale():
     result = apply_filters(sold, active, profile)
     assert result.active == []
     assert result.reconciled == ["125 W Thistle St #18"]
+
+
+# ---------------------------------------------------------------------------
+# The size/rate table (F12)
+# ---------------------------------------------------------------------------
+#
+# The premise the primary valuation basis rests on -- smaller parcels carry a
+# higher rate -- was acted on everywhere and shown nowhere. These pin the table
+# that shows it.
+
+
+def _land_profile_with_sizes():
+    profile = vacant_land_profile("size-bands")
+    profile.subject = Subject(lot_sqft=6000.0, label="Your lot")
+    return profile
+
+
+def _sold(address: str, lot: float, price: float) -> SoldComp:
+    return SoldComp(address=address, lot_sqft=lot, sold_price=price, sold_date=date(2026, 7, 1))
+
+
+def test_bands_hold_equal_counts_not_equal_widths():
+    """Round edges put nineteen sales in one band and one in the next."""
+    comps = [_sold(f"{i} Example St", 2000.0 + i * 200, 200_000.0) for i in range(20)]
+    table = build_size_band_table(comps, _land_profile_with_sizes())
+    counts = [r.count for r in table.rows]
+    assert len(table.rows) == 5
+    assert max(counts) - min(counts) <= 1, counts
+
+
+def test_a_band_is_never_thinner_than_a_defensible_median():
+    """Below three sales a median is an anecdote, so the band count steps down."""
+    comps = [_sold(f"{i} Example St", 3000.0 + i * 500, 200_000.0) for i in range(7)]
+    table = build_size_band_table(comps, _land_profile_with_sizes())
+    assert all(r.count >= MIN_BAND for r in table.rows)
+    assert len(table.rows) == 2
+
+
+def test_a_market_too_thin_to_split_says_so_instead_of_inventing_bands():
+    comps = [_sold(f"{i} Example St", 3000.0 + i * 500, 200_000.0) for i in range(4)]
+    table = build_size_band_table(comps, _land_profile_with_sizes())
+    assert len(table.rows) == 1
+    assert any("too few" in n for n in table.notes)
+
+
+def test_the_size_premium_is_measured_not_asserted():
+    """Larger lots priced lower per sqft must show as a positive trend."""
+    comps = [_sold(f"{i} Small St", 3000.0, 300_000.0) for i in range(5)]  # $100/sqft
+    comps += [_sold(f"{i} Large St", 12_000.0, 600_000.0) for i in range(5)]  # $50/sqft
+    table = build_size_band_table(comps, _land_profile_with_sizes())
+    assert table.trend_pct == pytest.approx(100.0)
+    assert any("size premium" in n for n in table.notes)
+
+
+def test_a_market_without_the_premium_is_reported_as_such():
+    """The premise the primary basis rests on does not always hold; say when."""
+    comps = [_sold(f"{i} Small St", 3000.0, 150_000.0) for i in range(5)]  # $50/sqft
+    comps += [_sold(f"{i} Large St", 12_000.0, 1_200_000.0) for i in range(5)]  # $100/sqft
+    table = build_size_band_table(comps, _land_profile_with_sizes())
+    assert table.trend_pct < 0
+    assert any("does not hold" in n for n in table.notes)
+
+
+def test_a_comp_without_a_size_is_counted_not_dropped():
+    """'Not found' is a value: it carries no rate but it is still in the dataset."""
+    comps = [_sold(f"{i} Example St", 3000.0 + i * 500, 200_000.0) for i in range(9)]
+    comps.append(SoldComp(address="No Size Rd", sold_price=200_000.0, sold_date=date(2026, 7, 1)))
+    table = build_size_band_table(comps, _land_profile_with_sizes())
+    assert table.without_size == 1
+    assert sum(r.count for r in table.rows) == 9
+    assert any("no size" in n for n in table.notes)
+
+
+def test_the_subject_s_own_band_is_marked():
+    comps = [_sold(f"{i} Example St", 2000.0 + i * 1000, 200_000.0) for i in range(12)]
+    table = build_size_band_table(comps, _land_profile_with_sizes())
+    marked = [r for r in table.rows if r.holds_subject]
+    assert len(marked) == 1
+    assert marked[0].low <= 6000.0 <= marked[0].high
+
+
+def test_every_sale_with_a_size_lands_in_exactly_one_band():
+    """Band edges must not double-count a comp sitting exactly on one."""
+    comps = [_sold(f"{i} Example St", 5000.0, 400_000.0) for i in range(6)]
+    comps += [_sold(f"{i} Other St", 9000.0, 500_000.0) for i in range(6)]
+    table = build_size_band_table(comps, _land_profile_with_sizes())
+    assert sum(r.count for r in table.rows) == 12
+
+
+def test_the_table_does_not_change_what_the_dataset_contains():
+    """It reports; it must never be mistaken for another filter."""
+    profile = _land_profile_with_sizes()
+    comps = [_sold(f"{i} Example St", 2000.0 + i * 900, 200_000.0) for i in range(15)]
+    before = [c.address for c in comps]
+    build_size_band_table(comps, profile)
+    assert [c.address for c in comps] == before
+
+
+# ---------------------------------------------------------------------------
+# One address, two parcels
+# ---------------------------------------------------------------------------
+#
+# Dedup exists because a source lists one sale twice, bare and with an MLS lot
+# suffix. But two genuinely different parcels can share a street address, and
+# collapsing those deletes a real sale from every statistic without a trace.
+
+
+def _land_profile_no_limits():
+    profile = vacant_land_profile("dedup")
+    profile.subject = Subject(lot_sqft=6000.0, label="Your lot")
+    profile.exclusions.max_lot_sqft = None
+    profile.exclusions.explicit_address_keys = []
+    return profile
+
+
+def test_two_distinct_parcels_at_one_address_are_both_kept():
+    """Observed live: a 3.9-acre and a 5.14-acre parcel at one address, priced
+    two hundred thousand apart."""
+    profile = _land_profile_no_limits()
+    result = apply_filters(
+        [
+            SoldComp(address="1 Example Rd", lot_sqft=169_884.0, sold_price=1_095_000.0,
+                     sold_date=date(2026, 7, 1)),
+            SoldComp(address="1 Example Rd", lot_sqft=223_898.0, sold_price=895_000.0,
+                     sold_date=date(2026, 7, 2)),
+        ],
+        [], profile,
+    )
+    assert len(result.sold) == 2
+    assert not result.duplicates
+    assert result.distinct_at_one_address, "sharing an address must be reported, not silent"
+
+
+def test_the_mls_lot_suffix_duplicate_still_collapses():
+    """The case dedup was written for: one sale listed twice, a dollar apart."""
+    profile = _land_profile_no_limits()
+    result = apply_filters(
+        [
+            SoldComp(address="12 Example St", lot_sqft=6000.0, sold_price=500_000.0,
+                     sold_date=date(2026, 7, 1)),
+            SoldComp(address="12 Example St #18", lot_sqft=6000.0, sold_price=500_001.0,
+                     sold_date=date(2026, 7, 3), agent="A. Agent"),
+        ],
+        [], profile,
+    )
+    assert len(result.sold) == 1
+    assert result.duplicates
+    assert result.sold[0].agent == "A. Agent", "the richer row must survive"
+    assert not result.distinct_at_one_address
+
+
+def test_rows_that_cannot_be_compared_collapse_as_before():
+    """No price on either row means no evidence they differ; keep the old
+    behaviour rather than inventing two sales."""
+    profile = _land_profile_no_limits()
+    result = apply_filters(
+        [
+            SoldComp(address="9 Example St", lot_sqft=6000.0, sold_date=date(2026, 7, 1)),
+            SoldComp(address="9 Example St", lot_sqft=6000.0, sold_date=date(2026, 7, 1)),
+        ],
+        [], profile,
+    )
+    assert len(result.sold) == 1
+
+
+def test_a_differing_size_alone_separates_two_parcels():
+    """Price can be missing; a materially different size still means two lots."""
+    profile = _land_profile_no_limits()
+    result = apply_filters(
+        [
+            SoldComp(address="7 Example St", lot_sqft=5000.0, sold_date=date(2026, 7, 1)),
+            SoldComp(address="7 Example St", lot_sqft=20_000.0, sold_date=date(2026, 7, 1)),
+        ],
+        [], profile,
+    )
+    assert len(result.sold) == 2
+
+
+def test_the_finding_reaches_the_run_s_caveats():
+    from recomps.pipeline.run import analyze
+    from recomps.research.base import Dataset
+
+    profile = _land_profile_no_limits()
+    dataset = Dataset(sold=[
+        SoldComp(address="1 Example Rd", lot_sqft=169_884.0, sold_price=1_095_000.0,
+                 sold_date=date(2026, 7, 1)),
+        SoldComp(address="1 Example Rd", lot_sqft=223_898.0, sold_price=895_000.0,
+                 sold_date=date(2026, 7, 2)),
+    ])
+    from recomps.markets.demoville import MARKET
+
+    run = analyze(dataset, MARKET, profile, date(2026, 4, 1), date(2026, 7, 31))
+    assert any("more than one parcel" in c for c in run.caveats)
+
+
+# ---------------------------------------------------------------------------
+# Who is working the market now, not only who worked it before
+# ---------------------------------------------------------------------------
+
+
+def _sold_by(agent: str, brokerage: str) -> SoldComp:
+    return SoldComp(
+        address=f"{agent} House", lot_sqft=6000.0, sold_price=500_000.0,
+        sold_date=date(2026, 7, 1), agent=agent, brokerage=brokerage,
+    )
+
+
+def _listed_by(agent: str | None, brokerage: str) -> ActiveListing:
+    return ActiveListing(
+        address=f"{agent or brokerage} Lot", lot_sqft=6000.0, list_price=520_000.0,
+        agent=agent, brokerage=brokerage,
+    )
+
+
+def test_an_agents_live_listings_are_counted_beside_their_closings():
+    analysis = analyze_agents(
+        [_sold_by("A. Agent", "Compass")],
+        active=[_listed_by("A. Agent", "Compass"), _listed_by("A. Agent", "Compass")],
+    )
+    row = next(a for a in analysis.agents if a.agent == "A. Agent")
+    assert row.closings == 1
+    assert row.active_listings == 2
+
+
+def test_an_agent_with_listings_but_no_closings_still_appears():
+    """They are working this market now, which is the question a seller asks."""
+    analysis = analyze_agents(
+        [_sold_by("A. Agent", "Compass")], active=[_listed_by("B. Newcomer", "Compass")]
+    )
+    names = {a.agent for a in analysis.agents}
+    assert "B. Newcomer" in names
+    newcomer = next(a for a in analysis.agents if a.agent == "B. Newcomer")
+    assert newcomer.closings == 0
+    assert newcomer.active_listings == 1
+    assert newcomer.flag == "", "no closings cannot earn a shortlist"
+
+
+def test_brokerages_carry_their_live_listing_count():
+    analysis = analyze_agents(
+        [_sold_by("A. Agent", "Compass")],
+        active=[_listed_by(None, "Coldwell Banker Realty"),
+                _listed_by(None, "Coldwell Banker Realty")],
+    )
+    families = {b.family: b for b in analysis.brokerages}
+    assert families["Coldwell Banker"].active_listings == 2
+    assert families["Coldwell Banker"].closings == 0
+    assert families["Compass"].closings == 1
+
+
+def test_a_listing_with_no_named_agent_still_counts_for_its_brokerage():
+    """Most listings on one observed index name the firm and nobody else."""
+    analysis = analyze_agents([], active=[_listed_by(None, "COMPASS")])
+    assert not analysis.agents
+    assert next(b for b in analysis.brokerages if b.family == "Compass").active_listings == 1
+
+
+def test_no_actives_leaves_every_count_at_zero():
+    analysis = analyze_agents([_sold_by("A. Agent", "Compass")])
+    assert all(a.active_listings == 0 for a in analysis.agents)
+    assert all(b.active_listings == 0 for b in analysis.brokerages)
+
+
+# ---------------------------------------------------------------------------
+# The bracket ladder (F13)
+# ---------------------------------------------------------------------------
+#
+# Every valuation rests on a bandwidth choice nobody was asked to make. On one
+# real run the estimate moved 14% between a tight reading of "similar" and the
+# pinned one.
+
+
+def _ladder_profile(size=6000.0, tolerance=0.25, explicit=None):
+    profile = vacant_land_profile("ladder")
+    profile.subject = Subject(lot_sqft=size, label="Your lot")
+    profile.similar_bracket.tolerance = tolerance
+    profile.similar_bracket.explicit_range = explicit
+    return profile
+
+
+def _spread_of_sales() -> list[SoldComp]:
+    # Small lots dear, large lots cheap -- the premise the bracket corrects for.
+    out = []
+    for i in range(10):
+        out.append(SoldComp(address=f"{i} Small St", lot_sqft=5500.0 + i * 50,
+                            sold_price=550_000.0, sold_date=date(2026, 7, 1)))
+    for i in range(10):
+        out.append(SoldComp(address=f"{i} Large St", lot_sqft=15_000.0 + i * 100,
+                            sold_price=750_000.0, sold_date=date(2026, 7, 1)))
+    return out
+
+
+def test_the_widest_rung_is_exactly_the_all_sold_basis():
+    """The ladder has to reconcile with the figures reported elsewhere, or it
+    is a third convention pretending to be evidence."""
+    profile = _ladder_profile()
+    sold = _spread_of_sales()
+    ladder = build_bracket_ladder(sold, profile)
+    valuation = value_subject(sold, [], profile)
+
+    widest = ladder.rows[-1]
+    assert widest.is_all_sold
+    assert widest.count == len(sold)
+    assert widest.value_from_median == pytest.approx(
+        valuation.by_key("all_sold_median").value
+    )
+    assert widest.value_from_avg == pytest.approx(
+        valuation.by_key("all_sold_avg").value
+    )
+
+
+def test_the_marked_rung_is_the_one_the_headline_uses():
+    profile = _ladder_profile(explicit=(5000.0, 8000.0))
+    sold = _spread_of_sales()
+    ladder = build_bracket_ladder(sold, profile)
+    valuation = value_subject(sold, [], profile)
+
+    marked = [r for r in ladder.rows if r.is_profile_bracket]
+    assert len(marked) == 1
+    assert marked[0].value_from_avg == pytest.approx(valuation.primary.value)
+
+
+def test_rungs_widen_monotonically_and_never_shrink_the_sample():
+    profile = _ladder_profile()
+    ladder = build_bracket_ladder(_spread_of_sales(), profile)
+    counts = [r.count for r in ladder.rows]
+    assert counts == sorted(counts), counts
+
+
+def test_a_pinned_bracket_does_not_duplicate_a_coinciding_rung():
+    """A +/-25% tolerance is the same rung as the ladder's own; one row, marked."""
+    profile = _ladder_profile(tolerance=0.25, explicit=None)
+    ladder = build_bracket_ladder(_spread_of_sales(), profile)
+    widths = [(r.low, r.high) for r in ladder.rows if not r.is_all_sold]
+    assert len(widths) == len(set(widths)), widths
+
+
+def test_a_thin_rung_is_marked_rather_than_hidden():
+    """Watching the sample grow is the point; a two-sale median still has to
+    say it is a two-sale median."""
+    profile = _ladder_profile()
+    sold = [
+        SoldComp(address="1 Only St", lot_sqft=6000.0, sold_price=500_000.0,
+                 sold_date=date(2026, 7, 1)),
+        SoldComp(address="2 Far St", lot_sqft=30_000.0, sold_price=900_000.0,
+                 sold_date=date(2026, 7, 1)),
+    ]
+    ladder = build_bracket_ladder(sold, profile)
+    assert ladder.rows[0].is_thin
+    assert ladder.rows[0].count == 1
+
+
+def test_the_spread_is_measured_and_stated_in_money():
+    profile = _ladder_profile()
+    ladder = build_bracket_ladder(_spread_of_sales(), profile)
+    assert ladder.spread_pct is not None and ladder.spread_pct >= 0
+    assert any("cost of the word" in n for n in ladder.notes)
+
+
+def test_no_subject_size_means_no_ladder_rather_than_a_wrong_one():
+    profile = _ladder_profile()
+    profile.subject.lot_sqft = None
+    ladder = build_bracket_ladder(_spread_of_sales(), profile)
+    assert not ladder.rows
+    assert ladder.notes
+
+
+def test_rates_are_not_rounded_before_they_become_a_value():
+    profile = _ladder_profile()
+    ladder = build_bracket_ladder(_spread_of_sales(), profile)
+    rung = next(r for r in ladder.rows if r.count and r.avg_ppsf)
+    assert rung.value_from_avg == pytest.approx(rung.avg_ppsf * 6000.0)
+    assert rung.value_from_avg != round(rung.avg_ppsf, 2) * 6000.0
+
+
+def test_strategy_a_states_what_the_band_mechanic_costs_this_run():
+    """A list price 8% under the estimate looks like a mistake unless the
+    output says the gap is set by the band, not by the market."""
+    from recomps.pipeline.guidance import build_guidance
+    from recomps.pipeline.stats import SoldToAskStats
+    from recomps.pipeline.valuation import Valuation, ValuationBasis
+
+    def guidance_for(anchor: float):
+        valuation = Valuation(
+            subject_size=6000.0, bracket_low=5000.0, bracket_high=8000.0,
+            bracket_count=5,
+            bases=[
+                ValuationBasis(key="similar_size_avg", label="x", ppsf=1.0,
+                               value=anchor, sample_size=5, is_primary=True),
+                ValuationBasis(key="all_sold_median", label="y", ppsf=1.0,
+                               value=anchor * 0.93, sample_size=30),
+            ],
+        )
+        return build_guidance(valuation, SoldToAskStats(), [])
+
+    a = next(s for s in guidance_for(544_720).strategies if s.key == "compete")
+    assert a.list_price == 499_000
+    assert "$45,720" in a.tradeoff and "8.4%" in a.tradeoff
+    assert "not by the market" in a.tradeoff
+
+
+def test_the_band_mechanic_is_a_cliff_and_the_text_admits_it():
+    """$549,999 lists at $499,000; $551,000 lists at $549,000. A thousand
+    dollars of estimate moves the recommendation by a whole band."""
+    from recomps.pipeline.guidance import build_guidance
+    from recomps.pipeline.stats import SoldToAskStats
+    from recomps.pipeline.valuation import Valuation, ValuationBasis
+
+    def compete(anchor: float) -> float:
+        valuation = Valuation(
+            subject_size=6000.0, bracket_low=5000.0, bracket_high=8000.0,
+            bracket_count=5,
+            bases=[
+                ValuationBasis(key="similar_size_avg", label="x", ppsf=1.0,
+                               value=anchor, sample_size=5, is_primary=True),
+            ],
+        )
+        strategies = build_guidance(valuation, SoldToAskStats(), []).strategies
+        return next(s for s in strategies if s.key == "compete").list_price
+
+    assert compete(549_999) == 499_000
+    assert compete(551_000) == 549_000
+
+
+def test_a_recording_replayed_through_a_later_window_says_what_it_lost(tmp_path):
+    """A window slides with the run date; a recording does not. Replayed months
+    later most of it silently disappears and every figure describes a smaller
+    market that reads exactly like a real one."""
+    import json
+
+    from recomps.markets.demoville import MARKET
+    from recomps.research.fixture import FixtureResearcher
+
+    fixtures = tmp_path / "fixtures"
+    fixtures.mkdir()
+    rows = [
+        {"address": f"{i} Example St", "lot_sqft": 6000, "sold_price": 500_000,
+         "sold_date": f"2026-05-{i + 1:02d}"}
+        for i in range(10)
+    ] + [
+        {"address": f"{i} Later St", "lot_sqft": 6000, "sold_price": 500_000,
+         "sold_date": f"2026-08-{i + 1:02d}"}
+        for i in range(5)
+    ]
+    (fixtures / "sold.json").write_text(json.dumps(rows), encoding="utf-8")
+
+    researcher = FixtureResearcher(str(fixtures))
+    dataset = researcher.gather(
+        MARKET, MARKET.profiles()["demo-lots"], date(2026, 7, 1), date(2026, 9, 30)
+    )
+    assert len(dataset.sold) == 5
+    note = " ".join(dataset.diagnostics.not_found)
+    assert "10 of its 15 recorded sales" in note
+    assert "2026-05-01 to 2026-08-05" in note
+    # The last recorded sale is explained, not dropped in as a bare date.
+    assert "is the last sale in it, not a setting" in note
+    assert "--as-of" not in note, "a command-line flag is meaningless on a screen"
