@@ -1,6 +1,6 @@
 # REComps
 
-**An LLM-orchestrated research pipeline that prices a property against its comparable sales, and writes the answer as a spreadsheet you can argue with.**
+**Works out what a property is worth by comparing it to nearby sales — on screen, and as a spreadsheet you can argue with.**
 
 ```bash
 pip install -e ".[ui]"
@@ -15,7 +15,7 @@ than silently starting a server that never exits:
 recomps run --market demoville --offline
 ```
 
-That command runs the entire pipeline — collection, exclusion, statistics, valuation, pricing strategy, geographic classification, agent analysis — against a synthetic market bundled with the engine, and writes a five-sheet Excel workbook, a JSON snapshot, and a methodology document. No API key. No network. No scraping.
+That command does everything a real run does — gathering sales, setting aside the ones that don't belong, the statistics, the valuation, the pricing strategies, sorting parcels by area of town, the agent analysis — against a made-up market that ships with the tool. It writes a five-sheet Excel workbook, a JSON snapshot, and a write-up of what it did. No API key. No network. No scraping.
 
 ---
 
