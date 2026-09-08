@@ -125,10 +125,15 @@ def _report_reach(diagnostics, comps: list[SoldComp], window_start: date) -> Non
 
 
 def _report_active_attribution(diagnostics, active: list[ActiveListing]) -> None:
-    """Say when listings mostly do not name an agent.
+    """Say when *current listings* mostly do not name an agent.
 
     Otherwise a zero in an agent's live-listing column reads as "this agent has
     nothing on the market", when it means "this index did not say who holds it".
+
+    Scoped to the active side on purpose, and the message says so: sold-side
+    attribution is gathered from property pages and is far more complete, so a
+    reader who takes this as a statement about the whole dataset will
+    under-trust the closings column, which is the one the shortlist rests on.
     """
     if not active:
         return
@@ -136,9 +141,12 @@ def _report_active_attribution(diagnostics, active: list[ActiveListing]) -> None
     if named >= len(active) * 0.8:
         return
     diagnostics.not_found.append(
-        f"Only {named} of {len(active)} listings name an agent; the rest give a "
-        "brokerage alone. Live-listing counts per agent are therefore a floor, not "
-        "a tally -- a zero means this index did not say who holds the listing."
+        f"Of the {len(active)} properties currently on the market, only {named} "
+        "name an agent; the rest give a brokerage alone. So the 'Live' column in "
+        "the agent table is a floor rather than a tally: a zero there means this "
+        "index did not say who holds the listing, not that the agent has nothing "
+        "listed. This says nothing about the sold side, which is attributed "
+        "separately and far more completely -- the closings column is not affected."
     )
 
 

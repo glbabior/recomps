@@ -816,8 +816,12 @@ def test_thin_agent_attribution_on_listings_is_declared():
         listing.agent = "A. Agent"
     _report_active_attribution(diagnostics, listings)
     note = " ".join(diagnostics.not_found)
-    assert "Only 6 of 34" in note
-    assert "a floor, not a tally" in note
+    assert "34 properties currently on the market, only 6" in note
+    assert "floor rather than a tally" in note
+    # It must not read as a statement about the whole dataset: sold-side
+    # attribution is gathered separately and is far more complete, and a reader
+    # who conflates them under-trusts the column the shortlist rests on.
+    assert "says nothing about the sold side" in note
 
 
 def test_well_attributed_listings_raise_nothing():

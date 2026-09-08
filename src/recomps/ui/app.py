@@ -1475,8 +1475,12 @@ def _agents(current: ui_state.Viewing) -> None:
                 ),
                 "Live": st.column_config.NumberColumn(
                     format="%,d",
-                    help="Listings this agent holds right now. Closings are history; "
-                         "this is who is working the market today.",
+                    help="Listings this agent holds right now. Closings are "
+                         "history; this is who is working the market today. A "
+                         "floor rather than a tally: where a listing index names "
+                         "only the brokerage, a zero here means it did not say "
+                         "who holds the listing. The closings column is "
+                         "attributed separately and is not affected.",
                 ),
                 "Pattern": st.column_config.TextColumn(
                     help="A generic pattern in the numbers, not a judgement about a "
