@@ -149,3 +149,11 @@ line length is 100.
 
 Tests are named for the behaviour they protect, and several carry a one-line
 docstring saying which real failure they exist to catch. Keep that.
+
+Commit messages describe what the codebase now does differently, never the
+instruction that produced them. "Describe the on-screen report before the
+workbook", not "Lead with the on-screen report". The imperative mood is right
+— "Fix CI", "Declare pydantic" — because the message completes *"applied, this
+commit will…"*; naming the request instead of the change is what to avoid, along
+with empty verbs like "enhance". The log is permanent and public, and it is what
+a stranger reads first.
