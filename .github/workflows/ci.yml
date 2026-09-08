@@ -6,6 +6,15 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Every job installs into an interpreter `actions/setup-python` provides, not
+# the runner's own. Ubuntu's system Python is marked externally managed
+# (PEP 668) and uv refuses to install into it, which failed every job here at
+# the install step. Pinning the interpreter also makes the version matrix mean
+# something: `--system` alone targeted whatever the image happened to ship, so
+# the three "python" jobs were three copies of one job.
+env:
+  DEFAULT_PYTHON: "3.13"
+
 jobs:
   test:
     name: tests (py${{ matrix.python }})
@@ -16,11 +25,17 @@ jobs:
         python: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          cache-dependency-glob: pyproject.toml
       - name: Install
         run: uv pip install --system -e ".[dev]"
+      - name: Check the interpreter is the one we asked for
+        run: python -c "import sys; assert sys.version.startswith('${{ matrix.python }}'), sys.version"
       - name: Lint
         run: ruff check src tests
       - name: Test
@@ -34,7 +49,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
       - uses: astral-sh/setup-uv@v5
+        with:
+          cache-dependency-glob: pyproject.toml
       - name: Install LibreOffice
         run: |
           sudo apt-get update
@@ -50,7 +70,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
       - uses: astral-sh/setup-uv@v5
+        with:
+          cache-dependency-glob: pyproject.toml
       - name: Install
         run: uv pip install --system -e .
       - name: Run Demoville
@@ -71,7 +96,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
       - uses: astral-sh/setup-uv@v5
+        with:
+          cache-dependency-glob: pyproject.toml
       - name: Install
         run: uv pip install --system -e ".[dev]"
       - name: Structural privacy tests

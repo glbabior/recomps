@@ -276,6 +276,20 @@ serves its most recent page of sales and will not reach further back because
 the window widened. A sale nobody published looks exactly like a sale that did
 not happen, and the two are worth telling apart.
 
+A saved search you own can be renamed, and its archived runs move with it. The
+name is part of the path a run was saved under, so a rename that touched only
+the search would orphan every run of it — the history would read empty and the
+archive would be unreachable. A search the market itself defines cannot be
+renamed here, because the name lives in the market definition and renaming it
+would leave the original in place beside a copy.
+
+The quadrant boundaries are shown, not merely named. A table reporting that the
+north-east sells at $65.60/sqft is a table nobody can check unless it also says
+where the north-east is — so the dividers are listed under it, the east/west one
+as a longitude and the north/south one as every geocoded point along it, because
+the road curves and that is the whole reason the centreline exists rather than a
+single latitude.
+
 Run times are shown in local time. They are stored, named and compared in UTC — a local stamp does not sort across a daylight-saving boundary and does not mean the same thing on another machine — but an evening run is already tomorrow in UTC, so a screen that reports the stored date is telling the reader something false about their own week.
 
 ## Where this is now
@@ -286,7 +300,7 @@ Working, in daily-usable shape, with limits worth stating plainly.
 four valuation bases, pricing strategies, sold-to-ask, size bands, quadrants,
 agents — reproduces a real hand-run analysis to the dollar. The workbook,
 snapshots, run history and reopening are done. The interface covers everything
-the command line does. 334 tests, all offline; a live run needs no test to
+the command line does. 342 tests, all offline; a live run needs no test to
 pass.
 
 **Working, with caveats.** Live research runs end to end against real sites
@@ -359,7 +373,8 @@ and the street-name trap; bracket selection; sold-to-ask arithmetic; brokerage
 grouping; address identity under both profile rules; the verification pass
 accepting a drifted date but rejecting a decades-old sale; that no workbook
 formula names a column letter; that a non-land profile genuinely reshapes the
-sheet; that opening a saved run recomputes nothing; that size bands hold
+sheet; that opening a saved run recomputes nothing; that renaming a search moves its
+archived runs with it and refuses a name already taken; that size bands hold
 comparable samples and that a sale with no size is counted rather than dropped;
 that the core view's workbook figures are formulas over its editable bounds
 rather than values; that two genuinely different parcels at one street address
