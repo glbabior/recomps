@@ -395,15 +395,6 @@ run is labelled in local time while its archive stays UTC; that a market
 plugin's folder is remembered between launches; and that the interface binds to
 localhost only.
 
-Two of those exist because something was wrong and nothing said so. Saving an
-edited search wrote to a widget's key after the widget had been drawn, which
-Streamlit refuses, so editing any existing search raised — covered now by a
-test checked the only way a regression test can be, by putting the bug back and
-watching it fail. The deduplication bug was quieter and worse: two real parcels
-sharing an address were merged, and one sale left the dataset without a
-warning, a diagnostic, or any visible sign. Both were found by testing a claim
-from outside the codebase against the code, rather than by reading it.
-
 ## Built with Claude
 
 The research process this implements was developed interactively with Claude over three end-to-end runs against a real market: the source quirks, the verification rules, the naming-grid trap, and the analytical choices were all found by doing the work, not by designing up front. That transcript became a specification, and the specification became this repository — reviewed, argued with, and built in Claude Code.
