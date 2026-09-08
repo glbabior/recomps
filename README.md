@@ -393,9 +393,11 @@ rather than values; that two genuinely different parcels at one street address
 survive deduplication while the MLS-suffix duplicate still collapses; that an
 index short of its own claimed count is reported as incomplete; that an
 attribution string is only split where a licence label names a person; that a
-run is labelled in local time while its archive stays UTC; that a market
-plugin's folder is remembered between launches; and that the interface binds to
-localhost only.
+run is labelled in local time while its archive stays UTC; that the
+recommendation is never a list price below the walk-away floor; that an agent's
+ratio against ask is a median, and one with no ratio sorts last rather than as
+a zero; that a market plugin's folder is remembered between launches; and that
+the interface binds to localhost only.
 
 ## Built with Claude
 
