@@ -1031,9 +1031,9 @@ def results_panel(market, profile: CompProfile) -> None:
     yours = st.columns(4)
     yours[0].metric(
         "Estimated value", money(figures.get("valuation")),
-        help=f"The average $/sq ft of the {bracket_count} sales nearest your "
-             "size, times your size. An average, not a median — see the "
-             "widening-bracket table for what that costs.",
+        help=f"The median $/sq ft of the {bracket_count} sales nearest your "
+             "size, times your size. The middle sale rather than the mean, so "
+             "one unbuildable slope or view lot cannot move it.",
     )
     # Both list prices, because the recommended one is deliberately under the
     # estimate and looks like an error beside it without its sibling.
@@ -1514,6 +1514,46 @@ def _agents(current: ui_state.Viewing) -> None:
             st.caption(md(caveat))
 
 
+#: How each sort option reads a comp row. A missing value sorts last rather
+#: than crashing or pretending to be zero.
+_COMP_ORDERS: dict[str, tuple[str, bool]] = {
+    "Sold date, newest first": ("sold_date", True),
+    "Agent": ("agent", False),
+    "Brokerage": ("brokerage", False),
+    "Price": ("sold_price", True),
+    "$ per sq ft": ("ppsf", True),
+    "Lot size": ("lot_sqft", True),
+    "Address": ("address", False),
+    "Area": ("area", False),
+}
+
+
+def _sorted_comps(rows: list[dict], order: str) -> list[dict]:
+    """Order the comps, keeping rows with nothing to sort on at the end.
+
+    "Not found" is a value here, so a comp with no agent must not vanish or
+    sort as though it were an agent called nothing -- it goes last, where it
+    can still be seen.
+    """
+    key, descending = _COMP_ORDERS.get(order, ("sold_date", True))
+
+    def value(row: dict):
+        if key == "ppsf":
+            price, size = row.get("sold_price"), row.get("lot_sqft")
+            raw = price / size if price and size else None
+        else:
+            raw = row.get(key)
+        return raw
+
+    present = [r for r in rows if value(r) is not None]
+    missing = [r for r in rows if value(r) is None]
+    present.sort(
+        key=lambda r: (value(r) if not isinstance(value(r), str) else value(r).lower()),
+        reverse=descending,
+    )
+    return present + missing
+
+
 def _comps_table(market, profile: CompProfile, current: ui_state.Viewing) -> None:
     rows = ui_state.comp_rows(current)
     if not rows:
@@ -1526,6 +1566,19 @@ def _comps_table(market, profile: CompProfile, current: ui_state.Viewing) -> Non
             "property's size below, and the figures above recompute from these "
             "same sales. Nothing is re-fetched and nothing is lost."
         )
+
+    # An explicit control rather than relying on clicking a column header:
+    # the table is a data editor carrying a Styler, and header sorting stopped
+    # working somewhere in that combination. This also states the thing someone
+    # actually wants -- to read one agent's sales together -- rather than
+    # leaving them to discover it.
+    order = st.selectbox(
+        "Sort by",
+        ["Sold date, newest first", "Agent", "Brokerage", "Price", "$ per sq ft",
+         "Lot size", "Address", "Area"],
+        key="comps_order",
+    )
+    rows = _sorted_comps(rows, order)
 
     excluded = current.adjustments.excluded
     table = [

@@ -218,12 +218,18 @@ def test_valuation_multiplies_unrounded_rates():
     assert primary.value != pytest.approx(6450 * round(82.3344, 2)), "rate was rounded first"
 
 
-def test_all_four_bases_are_reported():
+def test_every_basis_is_reported():
     profile = _land_profile()
     sold = [SoldComp(address="a", lot_sqft=6000, sold_price=480000)]
     active = [ActiveListing(address="b", lot_sqft=6000, list_price=540000)]
     keys = {b.key for b in value_subject(sold, active, profile).bases}
-    assert keys == {"similar_size_avg", "all_sold_median", "all_sold_avg", "active_median"}
+    assert keys == {
+        "similar_size_median",
+        "similar_size_avg",
+        "all_sold_median",
+        "all_sold_avg",
+        "active_median",
+    }
 
 
 def test_thin_bracket_produces_a_warning():
@@ -772,7 +778,9 @@ def test_the_marked_rung_is_the_one_the_headline_uses():
 
     marked = [r for r in ladder.rows if r.is_profile_bracket]
     assert len(marked) == 1
-    assert marked[0].value_from_avg == pytest.approx(valuation.primary.value)
+    # The primary basis is the bracket's median, so that is the column the
+    # headline has to agree with.
+    assert marked[0].value_from_median == pytest.approx(valuation.primary.value)
 
 
 def test_rungs_widen_monotonically_and_never_shrink_the_sample():

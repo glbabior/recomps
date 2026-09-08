@@ -2,7 +2,7 @@
 
 Four bases, deliberately reported side by side rather than blended:
 
-  1. *similar-size sold average $/sqft* -- the primary anchor,
+  1. *similar-size sold median $/sqft* -- the primary anchor,
   2. all-sold median $/sqft,
   3. all-sold average $/sqft,
   4. active-listing median $/sqft (asking-based context, not evidence of value).
@@ -11,6 +11,12 @@ The similar-size bracket leads because smaller parcels transact at a higher
 $/sqft than larger ones, so a market-wide figure understates a small subject.
 The bracket is what corrects for that, and the profile decides which attribute
 it keys on (F0).
+
+The primary anchor is the bracket's *median*, not its mean. Medians lead
+everywhere else here for the same reason they lead here: parcel quality skews a
+mean, and one unbuildable slope or view lot inside a small bracket moves the
+average and not the middle. The mean is reported beside it, because the gap
+between the two says how skewed the bracket is.
 
 Every basis multiplies an *unrounded* $/sqft by the subject size. Rounding the
 rate first moves the answer by tens of dollars.
@@ -114,12 +120,27 @@ def value_subject(
 
     specs = [
         (
+            "similar_size_median",
+            f"Similar-size sold median $/sqft ({len(bracket_ppsf)} comps)",
+            rate(bracket_ppsf, statistics.median),
+            len(bracket_ppsf),
+            True,
+            (
+                "Primary anchor: controls for the size premium smaller parcels "
+                "carry, and takes the middle sale rather than the mean so one "
+                "unbuildable slope or view lot cannot move it."
+            ),
+        ),
+        (
             "similar_size_avg",
             f"Similar-size sold average $/sqft ({len(bracket_ppsf)} comps)",
             rate(bracket_ppsf, statistics.fmean),
             len(bracket_ppsf),
-            True,
-            "Primary anchor: controls for the size premium smaller parcels carry.",
+            False,
+            (
+                "The same bracket read as a mean. Shown beside the median "
+                "because the gap between them is how skewed the bracket is."
+            ),
         ),
         (
             "all_sold_median",

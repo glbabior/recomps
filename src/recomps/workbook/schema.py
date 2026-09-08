@@ -186,6 +186,22 @@ def sold_schema(profile: CompProfile) -> SheetSchema:
                 width=11,
             ),
             Column("area", "Area", attr="area", width=8),
+            # A helper column, and the only way the sheet can hold a live
+            # *median* of the bracket. MEDIAN takes no criteria and there is no
+            # MEDIANIFS; SUMPRODUCT can weight a mean but cannot find a middle.
+            # So the condition is evaluated per row here, and the Summary takes
+            # a plain MEDIAN of the result -- which ignores the blanks. It reads
+            # off the editable bracket bounds, so correcting them still moves
+            # the estimate.
+            Column(
+                "bracket_ppsf",
+                "$ / sq ft (in bracket)",
+                # Filled by the builder, not here: the formula has to name the
+                # Summary row holding the editable bracket bounds, and the comp
+                # sheets are written before the Summary exists.
+                number_format=FMT_MONEY_CENTS,
+                width=18,
+            ),
         ],
     )
 

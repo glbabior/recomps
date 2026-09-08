@@ -120,6 +120,12 @@ def _write_comp_sheet(
             cell = ws.cell(row=row, column=schema.index(column.key))
             if column.is_formula:
                 cell.value = schema.render(column.formula, row)
+            elif column.attr is None:
+                # A column the builder fills later, once a Summary row it has
+                # to reference exists. Left empty rather than dashed: it is not
+                # a missing fact, it is a cell that is not written yet.
+                cell.font = st.BODY
+                continue
             else:
                 value = getattr(record, column.attr, None)
                 if value is None or value == "":
@@ -313,18 +319,25 @@ def _write_summary(
 
     row += 1
     refs["bracket_ppsf"] = row
-    ws.cell(row=row, column=1, value="Bracket average $/sq ft").font = st.BODY
+    ws.cell(row=row, column=1, value="Bracket median $/sq ft").font = st.BODY
+    # A plain MEDIAN over the helper column on the comp sheet, which already
+    # blanks every row outside the bracket. MEDIAN ignores those blanks, so
+    # this is the middle sale of the bracket and moves when the bounds above
+    # are edited.
     c = ws.cell(
         row=row,
         column=2,
         value=f"=IF(B{refs['bracket_count']}=0,\"\","
+        f"MEDIAN({sold_range('bracket_ppsf')}))"
+        if sold.has("bracket_ppsf")
+        else f"=IF(B{refs['bracket_count']}=0,\"\","
         f'AVERAGEIFS({ppsf_range},{size_range},">="&{lo},{size_range},"<="&{hi}))',
     )
     c.font, c.number_format = st.BODY, FMT_MONEY_CENTS
 
     size_ref = f"$B${refs['subject_size']}"
     basis_rows = [
-        ("value_similar", "Estimate - similar-size sold average (primary)",
+        ("value_similar", "Estimate - similar-size sold median (primary)",
          f"=B{refs['bracket_ppsf']}*{size_ref}", True),
         ("value_median", "Estimate - all-sold median $/sq ft",
          f"=B{refs['median_ppsf']}*{size_ref}", False),
@@ -471,6 +484,36 @@ def _write_summary(
 # ---------------------------------------------------------------------------
 # Pricing guidance
 # ---------------------------------------------------------------------------
+
+
+def _fill_bracket_column(ws, schema, last_row: int, bracket_row: int | None) -> None:
+    """Write the in-bracket rate column, once the bracket bounds have a home.
+
+    This column exists so the Summary can take a live MEDIAN of the bracket.
+    There is no MEDIANIFS and MEDIAN takes no criteria, and SUMPRODUCT can
+    weight a mean but cannot find a middle -- so the condition is evaluated per
+    row here and the Summary takes a plain MEDIAN of the result, which steps
+    over the blanks. It reads the editable bounds on the Summary, so correcting
+    a bracket still moves the estimate.
+
+    It cannot be declared with the other formulas because the comp sheets are
+    written before the Summary, and this needs the Summary row the bounds
+    landed on.
+    """
+    if bracket_row is None or not schema.has("bracket_ppsf"):
+        return
+    metric = schema.letter("metric")
+    ppsf = schema.letter("ppsf")
+    target = schema.letter("bracket_ppsf")
+    for row in range(2, last_row + 1):
+        cell = ws[f"{target}{row}"]
+        cell.value = (
+            f"=IF(AND(ISNUMBER({metric}{row}),ISNUMBER({ppsf}{row}),"
+            f"{metric}{row}>=Summary!$B${bracket_row},"
+            f'{metric}{row}<=Summary!$C${bracket_row}),{ppsf}{row},"")'
+        )
+        cell.font = st.BODY
+        cell.number_format = FMT_MONEY_CENTS
 
 
 def _write_guidance(ws: Worksheet, result: RunResult, summary: SheetRefs) -> None:
@@ -724,6 +767,7 @@ def build_workbook(result: RunResult, changes: list[tuple[str, str]] | None = No
     refs = _write_summary(
         summary_ws, result, sold, active, sold_last, active_last, changes
     )
+    _fill_bracket_column(sold_ws, sold, sold_last, refs.rows.get("bracket_low"))
     _write_guidance(guidance_ws, result, refs)
     _write_agents(agents_ws, result, sold, sold_last)
     return wb

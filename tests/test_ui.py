@@ -1377,3 +1377,40 @@ def test_the_walk_away_floor_says_it_is_not_from_the_estimate(result):
     floor_help = source.split('"Walk-away floor"')[1][:400]
     assert "Not from the estimate" in floor_help
     assert "all-sold median" in floor_help
+
+
+def test_the_comps_can_be_ordered_by_agent(result):
+    """Reading one agent's sales together is the point of the shortlist; the
+    table is a data editor carrying a Styler and header sorting stopped working
+    somewhere in that combination."""
+    from recomps.ui import app as app_mod
+
+    rows = ui_state.comp_rows(ui_state.Viewing(result=result))
+    ordered = app_mod._sorted_comps(rows, "Agent")
+    named = [r["agent"] for r in ordered if r["agent"]]
+    assert named == sorted(named, key=str.lower)
+    assert len(ordered) == len(rows), "sorting must not lose a comp"
+
+
+def test_a_comp_with_nothing_to_sort_on_goes_last_not_missing(result):
+    """'Not found' is a value: an unattributed sale must still be visible."""
+    from recomps.ui import app as app_mod
+
+    rows = ui_state.comp_rows(ui_state.Viewing(result=result))
+    rows[0] = {**rows[0], "agent": None}
+    ordered = app_mod._sorted_comps(rows, "Agent")
+    assert len(ordered) == len(rows)
+    assert ordered[-1]["agent"] is None
+
+
+@pytest.mark.parametrize(
+    "order", ["Sold date, newest first", "Brokerage", "Price", "$ per sq ft",
+              "Lot size", "Address", "Area"]
+)
+def test_every_sort_option_keeps_every_comp(result, order):
+    from recomps.ui import app as app_mod
+
+    rows = ui_state.comp_rows(ui_state.Viewing(result=result))
+    ordered = app_mod._sorted_comps(rows, order)
+    assert len(ordered) == len(rows)
+    assert {r["address"] for r in ordered} == {r["address"] for r in rows}
