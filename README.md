@@ -122,7 +122,7 @@ These are real failures from real runs, and the reason each guard exists.
 
 ## The analysis, and why it is shaped this way
 
-**Medians lead, including inside the bracket.** Parcel quality skews means badly. A single view lot or a single unbuildable slope moves the average and not the median, so the headline figures are medians and the means are shown beside them for contrast. That held everywhere except the one number a seller acts on, which anchored on the bracket's mean until it was noticed and changed — the reference run's own methodology said "use its average", written as shorthand for the middle value by someone who had already written, four lines earlier, that the median is preferred because quality skews the mean.
+**Medians lead, including inside the bracket.** Parcel quality skews means badly. A single view lot or a single unbuildable slope moves the average and not the median, so the headline figures are medians and the means are shown beside them for contrast.
 
 **The similar-size bracket is the primary anchor, read as a median.** Because smaller parcels carry a higher rate, the valuation that matters is the $/sqft of *sales near your own size*, not the market's. And the middle of that bracket, not its mean: a bracket is small — nineteen sales on the reference market — so a single unbuildable slope or view lot moves an average and not a median, which is the same reason medians lead everywhere else here. Five bases are reported side by side rather than blended — similar-size median (primary), similar-size average, all-sold median, all-sold average, and active-listing median — because the spread between them is information. The gap between the first two is specifically how skewed the bracket is.
 
