@@ -1437,3 +1437,34 @@ def test_the_band_label_follows_the_profile_s_measure(result):
     source = Path(app_mod.__file__).read_text(encoding="utf-8")
     panel = source.split("def _ladder(")[1][:2500]
     assert '"Lot size"' in panel and '"Living area"' in panel
+
+
+def test_the_agent_table_can_be_reordered(result):
+    from recomps.ui import app as app_mod
+
+    agents = ui_state.agent_analysis(ui_state.Viewing(result=result))["agents"]
+
+    by_closings = app_mod._sorted_agents(agents, "Closings")
+    counts = [a["closings"] for a in by_closings]
+    assert counts == sorted(counts, reverse=True)
+
+    by_name = app_mod._sorted_agents(agents, "Agent")
+    names = [a["agent"] for a in by_name]
+    assert names == sorted(names, key=str.lower)
+
+    # The default order is the engine's own; the rows arrive in it untouched.
+    assert app_mod._sorted_agents(agents, "Who to talk to first") == agents
+    assert all(len(app_mod._sorted_agents(agents, o)) == len(agents)
+               for o in ("Closings", "vs asking", "$/sq ft", "Live", "Agent"))
+
+
+def test_an_agent_with_no_ratio_sorts_last_not_as_a_zero(result):
+    """No ratio is one unpriced sale, not underperformance."""
+    from recomps.ui import app as app_mod
+
+    agents = [dict(a) for a in
+              ui_state.agent_analysis(ui_state.Viewing(result=result))["agents"]]
+    agents[0]["median_sold_to_ask"] = None
+    ordered = app_mod._sorted_agents(agents, "vs asking")
+    assert ordered[-1]["median_sold_to_ask"] is None
+    assert len(ordered) == len(agents)

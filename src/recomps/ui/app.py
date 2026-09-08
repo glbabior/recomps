@@ -1406,6 +1406,41 @@ def _active_table(current: ui_state.Viewing) -> None:
         ))
 
 
+def _ratio_percent(ratio: float | None) -> float | None:
+    """A sold-to-ask ratio as a signed percentage. 1.007 reads as +0.7%."""
+    return None if ratio is None else (ratio - 1.0) * 100.0
+
+
+#: How each agent sort reads a row, and whether bigger comes first.
+_AGENT_ORDERS: dict[str, tuple[str, bool]] = {
+    "Closings": ("closings", True),
+    "vs asking": ("median_sold_to_ask", True),
+    "$/sq ft": ("avg_ppsf", True),
+    "Live": ("active_listings", True),
+    "Agent": ("agent", False),
+}
+
+
+def _sorted_agents(agents: list[dict], order: str) -> list[dict]:
+    """Order the agent table.
+
+    "Who to talk to first" is the engine's own interview order and is left
+    alone -- the rows arrive in it. The rest are plain single-column sorts, with
+    anything missing last rather than sorting as a zero, since an agent with no
+    ratio has not underperformed, they have one unpriced sale.
+    """
+    if order not in _AGENT_ORDERS:
+        return agents
+    key, descending = _AGENT_ORDERS[order]
+    present = [a for a in agents if a.get(key) is not None]
+    missing = [a for a in agents if a.get(key) is None]
+    present.sort(
+        key=lambda a: a[key].lower() if isinstance(a[key], str) else a[key],
+        reverse=descending,
+    )
+    return present + missing
+
+
 def _agents(current: ui_state.Viewing) -> None:
     """Who is selling this market, and how their sales landed against ask.
 
@@ -1420,8 +1455,22 @@ def _agents(current: ui_state.Viewing) -> None:
 
     attributed = analysis.get("attributed") or 0
     total = analysis.get("total") or 0
-    with st.expander(f"Agents — {attributed} of {total} sales attributed", expanded=False):
+    # Open by default: this is the shortlist, and it is what the run is for
+    # once the number is settled.
+    with st.expander(
+        f"Agents — {attributed} of {total} sales attributed", expanded=True
+    ):
         colors = _shortlist_colors(analysis)
+        order = st.selectbox(
+            "Sort by",
+            ["Who to talk to first", "Closings", "vs asking", "$/sq ft", "Live",
+             "Agent"],
+            key="agents_order",
+            help="“Who to talk to first” puts the flagged shortlist at the top, "
+                 "then the most closings, then how their sales landed against "
+                 "ask. Volume before ratio on purpose: one sale bid up 22% says "
+                 "less than three sales at par.",
+        )
         rows = [
             {
                 "Agent": row["agent"],
@@ -1429,9 +1478,10 @@ def _agents(current: ui_state.Viewing) -> None:
                 "Closings": row["closings"],
                 # Signed distance from ask reads directly; a ratio of 1.007
                 # makes the reader do the subtraction.
-                "vs asking": (
-                    None if row["avg_sold_to_ask"] is None
-                    else (row["avg_sold_to_ask"] - 1.0) * 100.0
+                # The median, not the mean: with one to three sales an agent,
+                # a single bidding war drags an average a long way.
+                "vs asking": _ratio_percent(
+                    row.get("median_sold_to_ask", row.get("avg_sold_to_ask"))
                 ),
                 "$/sq ft": row.get("avg_ppsf"),
                 "Avg size": row.get("avg_size"),
@@ -1439,7 +1489,7 @@ def _agents(current: ui_state.Viewing) -> None:
                 "Pattern": row["flag"] or "",
                 "Both sides": "yes" if row["dual_agency"] else "",
             }
-            for row in analysis["agents"]
+            for row in _sorted_agents(analysis["agents"], order)
         ]
         # A run archived before these figures existed carries no rate at all.
         # An empty column reads as broken; say what it is instead.
@@ -1459,8 +1509,9 @@ def _agents(current: ui_state.Viewing) -> None:
             column_config={
                 "vs asking": st.column_config.NumberColumn(
                     format="%+.1f%%",
-                    help="Average close against the final asking price, across that "
-                         "agent's sales here.",
+                    help="The middle sale against its final asking price. A "
+                         "median rather than a mean, because one bidding war "
+                         "moves an average of two or three sales a long way.",
                 ),
                 "$/sq ft": st.column_config.NumberColumn(
                     format="$%.2f",

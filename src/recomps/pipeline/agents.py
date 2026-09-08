@@ -104,6 +104,10 @@ class AgentRow:
     brokerage: str | None
     closings: int
     avg_sold_to_ask: float | None
+    #: The middle sale against ask. Preferred over the mean for the same reason
+    #: medians lead elsewhere: one bidding war on one lot moves an average of
+    #: two or three sales a long way.
+    median_sold_to_ask: float | None = None
     #: The rate this agent's sales actually achieved. Read beside `avg_size`:
     #: a rate without the size that produced it inverts the real comparison.
     avg_ppsf: float | None = None
@@ -122,6 +126,7 @@ class AgentRow:
             "brokerage": self.brokerage,
             "closings": self.closings,
             "avg_sold_to_ask": self.avg_sold_to_ask,
+            "median_sold_to_ask": self.median_sold_to_ask,
             "avg_ppsf": self.avg_ppsf,
             "avg_size": self.avg_size,
             "active_listings": self.active_listings,
@@ -184,6 +189,7 @@ def analyze(
     for name, comps in by_agent.items():
         ratios = [r for c in comps if (r := c.sold_to_ask()) is not None]
         mean_ratio = statistics.fmean(ratios) if ratios else None
+        middle_ratio = statistics.median(ratios) if ratios else None
         rates = [r for c in comps if (r := c.price_per_sqft(denominator)) is not None]
         sizes = [v for c in comps if (v := c.metric_sqft(denominator)) is not None]
         agents.append(
@@ -194,6 +200,7 @@ def analyze(
                 ),
                 closings=len(comps),
                 avg_sold_to_ask=mean_ratio,
+                median_sold_to_ask=middle_ratio,
                 avg_ppsf=statistics.fmean(rates) if rates else None,
                 avg_size=statistics.fmean(sizes) if sizes else None,
                 active_listings=live_by_agent.get(name, 0),
@@ -204,7 +211,19 @@ def analyze(
                 ),
             )
         )
-    agents.sort(key=lambda a: (-a.closings, -(a.avg_sold_to_ask or 0.0), a.agent))
+    # Interview order: the flagged shortlist first, then volume, then how their
+    # sales landed against ask. Volume comes before ratio deliberately -- a
+    # single sale bid up 22% says less about an agent than three sales at par,
+    # and the flag already requires both repeat closings and a ratio at or
+    # above ask.
+    agents.sort(
+        key=lambda a: (
+            a.flag != "shortlist",
+            -a.closings,
+            -(a.median_sold_to_ask or 0.0),
+            a.agent,
+        )
+    )
 
     counts: dict[str, int] = defaultdict(int)
     for comp in sold:

@@ -949,3 +949,85 @@ def test_the_ladder_multiplies_by_the_metric_not_the_bracket_attribute():
 
     assert marked.value_from_median == pytest.approx(1_600_000.0)
     assert marked.value_from_avg == pytest.approx(primary.value)
+
+
+def test_the_recommendation_never_advertises_a_price_below_the_floor():
+    """The floor is the price below which the property is not for sale, so a
+    lower list price asks the owner to refuse the offer they invited. Between a
+    tactic and a limit, the limit wins."""
+    from recomps.pipeline.guidance import build_guidance
+    from recomps.pipeline.stats import SoldToAskStats
+    from recomps.pipeline.valuation import Valuation, ValuationBasis
+
+    def guidance_for(anchor: float):
+        valuation = Valuation(
+            subject_size=6450.0, bracket_low=5000.0, bracket_high=8000.0,
+            bracket_count=19,
+            bases=[
+                ValuationBasis(key="similar_size_median", label="x", ppsf=1.0,
+                               value=anchor, sample_size=19, is_primary=True),
+            ],
+        )
+        return build_guidance(valuation, SoldToAskStats(), [])
+
+    # An anchor just above a band edge drops the compete price nearly a whole
+    # band, taking it under a floor 5% below that same anchor.
+    guidance = guidance_for(536_729)
+    prices = {s.key: s.list_price for s in guidance.strategies}
+    assert prices["compete"] < guidance.floor
+
+    recommended = next(s for s in guidance.strategies if s.recommended)
+    assert recommended.key == "at_market"
+    assert recommended.list_price >= guidance.floor
+    assert "below your floor" in next(
+        s for s in guidance.strategies if s.key == "compete"
+    ).label
+
+
+def test_the_compete_price_stays_recommended_when_it_clears_the_floor():
+    from recomps.pipeline.guidance import build_guidance
+    from recomps.pipeline.stats import SoldToAskStats
+    from recomps.pipeline.valuation import Valuation, ValuationBasis
+
+    # Just above a band edge, so the drop is small and the floor is cleared.
+    valuation = Valuation(
+        subject_size=6450.0, bracket_low=5000.0, bracket_high=8000.0,
+        bracket_count=19,
+        bases=[
+            ValuationBasis(key="similar_size_median", label="x", ppsf=1.0,
+                           value=505_000, sample_size=19, is_primary=True),
+        ],
+    )
+    guidance = build_guidance(valuation, SoldToAskStats(), [])
+    recommended = next(s for s in guidance.strategies if s.recommended)
+    assert recommended.key == "compete"
+    assert recommended.list_price >= guidance.floor
+    assert not guidance.warnings
+
+
+def test_an_agent_ratio_is_reported_as_a_median():
+    """One bidding war moves an average of two or three sales a long way."""
+    sold = [
+        SoldComp(address=f"{i} Example St", lot_sqft=6000.0, sold_price=price,
+                 final_list_price=500_000.0, sold_date=date(2026, 7, 1),
+                 agent="A. Agent", brokerage="Compass")
+        for i, price in enumerate((500_000.0, 505_000.0, 750_000.0))
+    ]
+    row = next(a for a in analyze_agents(sold).agents if a.agent == "A. Agent")
+    assert row.median_sold_to_ask == pytest.approx(1.01)
+    assert row.avg_sold_to_ask == pytest.approx(1.17, abs=0.01)
+
+
+def test_the_interview_order_puts_the_shortlist_first():
+    """Volume before ratio on purpose: one sale bid up 22% says less about an
+    agent than three sales at par."""
+    sold = []
+    for i in range(3):
+        sold.append(SoldComp(address=f"{i} Steady St", lot_sqft=6000.0,
+                             sold_price=500_000.0, final_list_price=500_000.0,
+                             sold_date=date(2026, 7, 1), agent="Steady"))
+    sold.append(SoldComp(address="1 Lucky St", lot_sqft=6000.0,
+                         sold_price=610_000.0, final_list_price=500_000.0,
+                         sold_date=date(2026, 7, 1), agent="Lucky"))
+    order = [a.agent for a in analyze_agents(sold).agents]
+    assert order.index("Steady") < order.index("Lucky")

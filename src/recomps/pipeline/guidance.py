@@ -202,15 +202,32 @@ def build_guidance(
         basis = f"{FLOOR_DISCOUNT:.0%} below the estimate"
 
     warnings: list[str] = []
-    # Strategy A drops to the next search-band edge below the anchor. When the
-    # anchor sits just above an edge that drop is nearly a whole band, and the
-    # ask can land under the walk-away floor -- an ask you would refuse to
-    # accept. Worth saying out loud rather than quietly presenting both.
+    # Strategy A drops to the search-band edge below the anchor, and when the
+    # anchor sits just above an edge that drop is nearly a whole band -- far
+    # enough that the ask can land under the walk-away floor.
+    #
+    # Recommending it there would be incoherent: the floor is the price below
+    # which this property is not for sale, so advertising a lower one asks the
+    # owner to refuse the offer they invited. Between a tactic and a limit, the
+    # limit wins. The recommendation moves to the strategy that respects it and
+    # strategy A stays on the page, described for what it then is.
     if floor is not None and compete < floor:
+        for strategy in strategies:
+            strategy.recommended = strategy.key == "at_market"
+        compete_strategy = strategies[0]
+        compete_strategy.label = "A. Price to compete (below your floor)"
+        compete_strategy.tradeoff += (
+            f" On this run it lands under the walk-away floor of ${floor:,.0f}, "
+            "so it is no longer the recommendation: it would advertise a price "
+            "you have said you would not accept. Use it only if you would hold "
+            "out for bidding and genuinely refuse the ask if none came."
+        )
         warnings.append(
-            f"Strategy A (${compete:,.0f}) sits below the walk-away floor "
-            f"(${floor:,.0f}) because the anchor falls just above a "
-            f"${DEFAULT_SEARCH_BAND:,.0f} band edge. Either treat that list price as an "
-            "invitation to bid rather than a price you would accept, or use strategy B."
+            f"Priced to compete (${compete:,.0f}) falls below the walk-away floor "
+            f"(${floor:,.0f}), because the estimate sits just above a "
+            f"${DEFAULT_SEARCH_BAND:,.0f} search-band edge and this strategy drops "
+            f"to the edge beneath it. Priced at market (${at_market:,.0f}) is "
+            "recommended instead. Lower the floor only if you would actually "
+            "accept less."
         )
     return Guidance(strategies=strategies, floor=floor, floor_basis=basis, warnings=warnings)
