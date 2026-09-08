@@ -222,15 +222,19 @@ def _write_summary(
 
         row += 1
         ws.cell(row=row, column=1, value="Core average $/sq ft").font = st.BODY
-        for column, expression, values in (
-            (2, sold_in, sold_ppsf), (3, active_in, active_ppsf)
-        ):
+        for column, values in ((2, sold_ppsf), (3, active_ppsf)):
             letter = "B" if column == 2 else "C"
+            # AVERAGEIFS, not SUMPRODUCT: a rate that cannot be computed is a
+            # blank, and SUMPRODUCT multiplies that blank as text and returns
+            # #VALUE! for the whole cell. AVERAGEIFS averages the numbers among
+            # the matching cells and steps over the rest, which is the same
+            # thing the Python side does with a None.
             c = ws.cell(
                 row=row,
                 column=column,
                 value=f"=IF({letter}{core_count_row}=0,\"\","
-                f"SUMPRODUCT({expression}*{values})/{letter}{core_count_row})",
+                f'AVERAGEIFS({values},{values},">="&{core_lo},'
+                f'{values},"<="&{core_hi}))',
             )
             c.font, c.number_format = st.BODY, FMT_MONEY_CENTS
 
@@ -264,8 +268,10 @@ def _write_summary(
         bracket_key = "metric"
     size_range = sold_range(bracket_key)
     ppsf_range = sold_range("ppsf")
-    # SUMPRODUCT rather than COUNTIFS/AVERAGEIFS: it predates 2007, and it lets
-    # the bracket recompute live when the owner edits the bounds above.
+    # SUMPRODUCT counts membership because it needs no helper column and
+    # recomputes live when the owner edits the bounds above. The *average*
+    # cannot use it: the rate column holds a blank where a size was missing,
+    # and SUMPRODUCT multiplies that blank as text into #VALUE!.
     membership = f"({size_range}>={lo})*({size_range}<={hi})"
 
     row += 1
@@ -280,8 +286,8 @@ def _write_summary(
     c = ws.cell(
         row=row,
         column=2,
-        value=f"=IF(B{refs['bracket_count']}=0,\"\",SUMPRODUCT({membership}*{ppsf_range})"
-        f"/B{refs['bracket_count']})",
+        value=f"=IF(B{refs['bracket_count']}=0,\"\","
+        f'AVERAGEIFS({ppsf_range},{size_range},">="&{lo},{size_range},"<="&{hi}))',
     )
     c.font, c.number_format = st.BODY, FMT_MONEY_CENTS
 

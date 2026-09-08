@@ -15,8 +15,12 @@ templates over those keys::
 That indirection is the whole reason a profile can reshape the output instead of
 merely relabelling it.
 
-Formula vocabulary is deliberately pre-2007: COUNT/COUNTA/COUNTIF, AVERAGE,
-AVERAGEIF, MEDIAN, MIN/MAX, ROUND. No XLOOKUP, no FILTER, no dynamic arrays --
+Formula vocabulary is deliberately old: COUNT/COUNTA/COUNTIF, SUMPRODUCT,
+AVERAGE, AVERAGEIF/AVERAGEIFS, MEDIAN, MIN/MAX, ROUND, ISNUMBER. The IFS family
+is Excel 2007, which is the ceiling here and is used only where SUMPRODUCT
+cannot be: it steps over a blank rate, where SUMPRODUCT multiplies that blank
+as text and returns #VALUE! for the whole cell. No XLOOKUP, no FILTER, no
+dynamic arrays --
 the output has to open cleanly in old Excel and in the viewers people actually
 have.
 """
