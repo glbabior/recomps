@@ -586,6 +586,39 @@ def _can_research(market) -> bool:
         return False
 
 
+def confirmation_panel() -> bool:
+    """The run stopped to ask. Returns True when it is waiting on an answer.
+
+    Rendered above the tabs, not inside the one that started the run. A run
+    that pauses looks exactly like a run that did nothing: the progress box
+    disappears, no results arrive, and the only sign is a panel the reader has
+    to go looking for. Whatever the page is waiting on belongs at the top of
+    the page.
+    """
+    pending = st.session_state.get("pending_plan")
+    if not pending:
+        return False
+
+    st.warning("**This run stopped to ask before spending.**")
+    st.markdown(md(f"### {pending}"))
+    st.caption(
+        "Reading the index cost nothing and is already done. This is the part "
+        "that spends, and the number of properties came from the site rather "
+        "than from you — so it is worth seeing before it happens. Saying yes "
+        "does not re-read anything: the pages already fetched are cached."
+    )
+    columns = st.columns([1, 1, 4])
+    if columns[0].button("Go ahead", type="primary"):
+        st.session_state["lookups_ok"] = True
+        st.session_state.pop("pending_plan", None)
+        st.session_state["run_now"] = True
+        st.rerun()
+    if columns[1].button("Stop"):
+        st.session_state.pop("pending_plan", None)
+        st.rerun()
+    return True
+
+
 def run_panel(market, profile: CompProfile) -> None:
     st.subheader("Ask this search again")
 
@@ -625,25 +658,6 @@ def run_panel(market, profile: CompProfile) -> None:
         value=date.today(),
         help="Set a past date to reproduce an earlier run exactly.",
     )
-
-    pending = st.session_state.get("pending_plan")
-    if pending:
-        st.warning(md(pending))
-        st.caption(
-            "The index has been read already and cost nothing. This is the part "
-            "that spends, and the number of properties came from the site rather "
-            "than from you — so it is worth seeing before it happens."
-        )
-        columns = st.columns([1, 1, 3])
-        if columns[0].button("Go ahead", type="primary"):
-            st.session_state["lookups_ok"] = True
-            st.session_state.pop("pending_plan", None)
-            st.session_state["run_now"] = True
-            st.rerun()
-        if columns[1].button("Stop"):
-            st.session_state.pop("pending_plan", None)
-            st.rerun()
-        return
 
     go = st.button("Run", type="primary") or st.session_state.pop("run_now", False)
     if not go:
@@ -1586,6 +1600,9 @@ def main() -> None:
 
     if profile is None:
         st.info("Create a search to begin.")
+        return
+
+    if confirmation_panel():
         return
 
     run_tab, history_tab = st.tabs(["Run it", "Past runs"])

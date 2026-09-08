@@ -1236,3 +1236,76 @@ def test_a_rename_onto_a_taken_name_leaves_the_archive_alone(
     with pytest.raises(FileExistsError):
         history_mod.rename_profile_runs(tmp_path, "demoville", "old-search", "taken")
     assert len(history_mod.list_runs(tmp_path, "demoville", "old-search")) == 1
+
+
+@pytest.fixture
+def runnable(browsable):
+    """The folder market, with enough recorded data to complete a run."""
+    import json
+
+    market = browsable / "somewhere-market"
+    fixtures = market / "fixtures"
+    fixtures.mkdir(exist_ok=True)
+    (fixtures / "sold.json").write_text(
+        json.dumps([
+            {"address": f"{i} Example St", "lot_sqft": 6000, "sold_price": 500_000,
+             "sold_date": "2026-08-01", "final_list_price": 495_000}
+            for i in range(6)
+        ]),
+        encoding="utf-8",
+    )
+    return market
+
+
+def test_a_run_waiting_to_be_asked_says_so_above_everything(config_dir, browsable):
+    """A paused run looks exactly like a run that did nothing: the progress box
+    disappears, no results arrive, and the only sign was a panel inside one of
+    two tabs. Whatever the page is waiting on belongs at the top of it."""
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_file(str(APP), default_timeout=120).run()
+    app.session_state["market_choice"] = "__path__"
+    app.session_state["market_path"] = str(browsable / "somewhere-market")
+    app.session_state["pending_plan"] = "34 properties need a page lookup."
+    app.run()
+
+    assert not app.exception
+    assert any("stopped to ask" in w.value for w in app.warning)
+    labels = [b.label for b in app.button]
+    assert "Go ahead" in labels and "Stop" in labels
+    assert not app.tabs, "nothing else competes with the question"
+
+
+def test_saying_go_ahead_clears_the_question_and_restarts_the_run(
+    config_dir, runnable
+):
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_file(str(APP), default_timeout=120).run()
+    app.session_state["market_choice"] = "__path__"
+    app.session_state["market_path"] = str(runnable)
+    app.session_state["pending_plan"] = "34 properties need a page lookup."
+    app.run()
+
+    next(b for b in app.button if b.label == "Go ahead").click().run()
+    assert not app.exception
+    assert "pending_plan" not in app.session_state
+    assert app.session_state["lookups_ok"] is True, "the answer must reach the run"
+    assert app.tabs, "the page comes back once the question is answered"
+
+
+def test_saying_stop_leaves_no_question_and_no_permission(config_dir, runnable):
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_file(str(APP), default_timeout=120).run()
+    app.session_state["market_choice"] = "__path__"
+    app.session_state["market_path"] = str(runnable)
+    app.session_state["pending_plan"] = "34 properties need a page lookup."
+    app.run()
+
+    next(b for b in app.button if b.label == "Stop").click().run()
+    assert not app.exception
+    assert "pending_plan" not in app.session_state
+    assert "lookups_ok" not in app.session_state, (
+        "declining must not leave permission behind"
+    )
