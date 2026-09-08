@@ -1008,27 +1008,53 @@ def results_panel(market, profile: CompProfile) -> None:
         st.caption(md(span))
 
     figures = ui_state.headline(current)
-    columns = st.columns(6)
-    columns[0].metric("Sold comps", figures.get("sold_count", 0))
-    columns[1].metric("Median $/sq ft", rate(figures.get("median_ppsf")))
-    columns[2].metric(
+    sold_count = figures.get("sold_count", 0)
+    bracket_count = figures.get("bracket_count", 0)
+
+    # Two groups, because these six numbers rest on three different samples and
+    # one row invited reading them as one picture. The market-wide median in
+    # particular is context: nothing on the right is derived from it.
+    st.markdown(f"**This market** — all {sold_count} sold comps")
+    about_market = st.columns([1, 1, 4])
+    about_market[0].metric("Sold comps", sold_count)
+    about_market[1].metric(
+        "Median $/sq ft", rate(figures.get("median_ppsf")),
+        help="Across every sold comp, whatever its size. This is context for "
+             "the market, not an input: none of the figures below is derived "
+             "from it.",
+    )
+
+    st.markdown(
+        f"**Your property** — priced from the {bracket_count} sold comps "
+        "nearest its size"
+    )
+    yours = st.columns(4)
+    yours[0].metric(
         "Estimated value", money(figures.get("valuation")),
-        help=f"From {figures.get('bracket_count', 0)} similar-size sales.",
+        help=f"The average $/sq ft of the {bracket_count} sales nearest your "
+             "size, times your size. An average, not a median — see the "
+             "widening-bracket table for what that costs.",
     )
     # Both list prices, because the recommended one is deliberately under the
     # estimate and looks like an error beside it without its sibling.
-    columns[3].metric(
+    yours[1].metric(
         "Priced to compete", money(figures.get("suggested_list")),
-        help="Strategy A: just under a search-band edge, to be found by the "
-             "band below and bid up. Deliberately under the estimate — how far "
-             "under depends on where the estimate sits inside its band.",
+        help="Strategy A, from the estimate: just under a search-band edge, to "
+             "be found by the band below and bid up. Deliberately under the "
+             "estimate — how far under depends on where the estimate sits "
+             "inside its band.",
     )
-    columns[4].metric(
+    yours[2].metric(
         "Priced at market", money(figures.get("at_market")),
-        help="Strategy B: a straightforward ask near the estimate. Moderate "
-             "market time.",
+        help="Strategy B, from the estimate: a straightforward ask near it. "
+             "Moderate market time.",
     )
-    columns[5].metric("Walk-away floor", money(figures.get("floor")))
+    yours[3].metric(
+        "Walk-away floor", money(figures.get("floor")),
+        help="Not from the estimate. Five per cent below the all-sold median "
+             "basis — a deliberately conservative number, so it does not move "
+             "with the similar-size bracket.",
+    )
 
     for note in ui_state.coverage_notes(current):
         st.warning(md(note))

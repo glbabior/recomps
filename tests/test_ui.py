@@ -1355,3 +1355,25 @@ def test_an_old_run_is_not_offered_as_though_it_just_finished(
     newest = history_mod.list_runs(tmp_path, "demoville", "demo-lots")[0]
     age = (datetime.now(UTC) - newest.run_at).total_seconds() / 60
     assert age > app_mod.RECENT_RUN_MINUTES, "too old to be what someone is waiting for"
+
+
+def test_the_headline_separates_the_market_from_your_property(result):
+    """Six figures resting on three different samples were in one row, which
+    invited reading them as one picture — the market-wide median in particular,
+    which feeds none of the numbers beside it."""
+    from recomps.ui import app as app_mod
+
+    source = Path(app_mod.__file__).read_text(encoding="utf-8")
+    assert "**This market** — all {sold_count} sold comps" in source
+    assert "**Your property** — priced from the {bracket_count} sold comps" in source
+
+
+def test_the_walk_away_floor_says_it_is_not_from_the_estimate(result):
+    """It comes from the all-sold median basis, so it does not move with the
+    similar-size bracket the three list prices come from."""
+    from recomps.ui import app as app_mod
+
+    source = Path(app_mod.__file__).read_text(encoding="utf-8")
+    floor_help = source.split('"Walk-away floor"')[1][:400]
+    assert "Not from the estimate" in floor_help
+    assert "all-sold median" in floor_help
