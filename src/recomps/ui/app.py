@@ -59,6 +59,15 @@ from recomps.research.fixture import FixtureResearcher
 from recomps.ui import state as ui_state
 from recomps.workbook.builder import build_workbook
 
+try:  # the research layer is an optional extra
+    from recomps.research.live import LookupsNeedConfirmation
+except ImportError:  # pragma: no cover - exercised by a bare install
+    class LookupsNeedConfirmation(RuntimeError):
+        """Stand-in so the interface imports without the live extra."""
+
+        plan = None
+
+
 st.set_page_config(page_title="REComps", page_icon=":house:", layout="wide")
 
 # Streamlit's own Deploy button publishes an app to its public cloud. On a tool
@@ -617,7 +626,27 @@ def run_panel(market, profile: CompProfile) -> None:
         help="Set a past date to reproduce an earlier run exactly.",
     )
 
-    if not st.button("Run", type="primary"):
+    pending = st.session_state.get("pending_plan")
+    if pending:
+        st.warning(md(pending))
+        st.caption(
+            "The index has been read already and cost nothing. This is the part "
+            "that spends, and the number of properties came from the site rather "
+            "than from you — so it is worth seeing before it happens."
+        )
+        columns = st.columns([1, 1, 3])
+        if columns[0].button("Go ahead", type="primary"):
+            st.session_state["lookups_ok"] = True
+            st.session_state.pop("pending_plan", None)
+            st.session_state["run_now"] = True
+            st.rerun()
+        if columns[1].button("Stop"):
+            st.session_state.pop("pending_plan", None)
+            st.rerun()
+        return
+
+    go = st.button("Run", type="primary") or st.session_state.pop("run_now", False)
+    if not go:
         return
 
     with st.status("Working…", expanded=True) as status:
@@ -632,6 +661,11 @@ def run_panel(market, profile: CompProfile) -> None:
                     via=via,
                     budget=Budget() if via == "api" else None,
                     max_lookups=int(cap) or None,
+                    # None means "stop and ask". The run raises with its plan,
+                    # this panel shows it, and a second attempt carries True.
+                    # Asking again costs nothing: the index page is cached, so
+                    # the retry reaches the same point without a new request.
+                    confirm=True if st.session_state.pop("lookups_ok", False) else None,
                 )
                 if not researcher.extractor.available:
                     status.update(label="Cannot research", state="error")
@@ -654,6 +688,10 @@ def run_panel(market, profile: CompProfile) -> None:
             )
             _archive(market, result)
             status.update(label="Done", state="complete")
+        except LookupsNeedConfirmation as plan_needed:
+            status.update(label="Waiting for you", state="complete")
+            st.session_state["pending_plan"] = plan_needed.plan.describe()
+            st.rerun()
         except Exception as exc:
             status.update(label="Failed", state="error")
             st.exception(exc)

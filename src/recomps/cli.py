@@ -542,8 +542,11 @@ def _choose_profile(market_obj, requested: str | None) -> CompProfile:
 @click.option("--compare", "compare_target", default=None,
               help="Compare against a saved run: a snapshot path, or 'last'.")
 @click.option("--no-archive", is_flag=True, help="Do not keep this run in the archive.")
+@click.option("--yes", "assume_yes", is_flag=True,
+              help="Do not stop to confirm the per-property lookups. For scripts.")
 def run(market, market_path, profile, window, offline, live_mode, max_lookups, max_cost,
-        via, model, cache_dir, as_of, out, compare_target, no_archive) -> None:
+        via, model, cache_dir, as_of, out, compare_target, no_archive, assume_yes,
+) -> None:
     """Run a search and write the workbook, the archive entry and the write-up."""
     market_obj = _open_market(market, market_path)
     comp_profile = _choose_profile(market_obj, profile)
@@ -568,12 +571,25 @@ def run(market, market_path, profile, window, offline, live_mode, max_lookups, m
         from recomps.research.live import build_live_researcher
         from recomps.research.llm import Budget
 
+        def _ask(plan) -> bool:
+            # The index is already read and free; this is the first moment the
+            # run knows what it wants to spend, and the count came from the
+            # site rather than from the user.
+            click.echo("")
+            click.secho(f"  {plan.describe()}", fg="yellow")
+            if not _interactive():
+                click.echo("  Not a terminal, so nothing is assumed. Pass --yes "
+                           "to allow the lookups.")
+                return False
+            return click.confirm("  Go ahead?", default=True)
+
         researcher = build_live_researcher(
             cache_dir or str(Path(market_obj.data_dir()) / "http-cache"),
             via=via,
             budget=Budget(max_cost_usd=max_cost) if via == "api" else None,
             model=model,
             max_lookups=max_lookups,
+            confirm=True if assume_yes else _ask,
         )
         if not researcher.extractor.available:
             _fail(

@@ -890,3 +890,108 @@ def test_an_absolute_url_on_the_same_site_is_kept():
     resolved, problems = _extract_url("https://listings.invalid/home/ok/")
     assert resolved == "https://listings.invalid/home/ok/"
     assert not problems
+
+
+# ---------------------------------------------------------------------------
+# Nothing is spent without being asked
+# ---------------------------------------------------------------------------
+#
+# The count of property lookups comes from the fetched index, so the ceiling is
+# set by the site rather than by the user. An index returning four thousand
+# records instead of forty would otherwise spend four thousand lookups.
+
+
+def _plan(lookups: int, via: str = "api"):
+    from recomps.research.live import LookupPlan
+
+    return LookupPlan(lookups=lookups, via=via)
+
+
+def test_a_metered_plan_states_the_money():
+    plan = _plan(40)
+    assert plan.estimated_cost_usd == pytest.approx(1.60)
+    assert "$1.60" in plan.describe()
+    assert "40 properties" in plan.describe()
+
+
+def test_a_subscription_plan_states_there_is_no_bill():
+    plan = _plan(40, via="subscription")
+    assert plan.estimated_cost_usd is None
+    assert "not billed per page" in plan.describe()
+    assert "$" not in plan.describe()
+
+
+def test_a_small_run_is_not_interrupted():
+    """A prompt nobody reads is worse than no prompt."""
+    from recomps.research.live import CONFIRM_ABOVE_LOOKUPS
+
+    assert CONFIRM_ABOVE_LOOKUPS > 1
+    researcher, comps, profile = _capped_researcher(CONFIRM_ABOVE_LOOKUPS - 1)
+    asked = []
+    researcher.confirm = lambda plan: asked.append(plan) or True
+    researcher._fan_out(comps, profile)
+    assert not asked, "a small run should not stop to ask"
+
+
+def test_a_large_run_asks_first_and_declining_spends_nothing():
+    from recomps.research.live import CONFIRM_ABOVE_LOOKUPS
+
+    researcher, comps, profile = _capped_researcher(CONFIRM_ABOVE_LOOKUPS + 5)
+    asked = []
+
+    def refuse(plan):
+        asked.append(plan)
+        return False
+
+    researcher.confirm = refuse
+    claims = researcher._fan_out(comps, profile)
+    assert asked and asked[0].lookups == CONFIRM_ABOVE_LOOKUPS + 5
+    assert claims == []
+    assert researcher.log.lookups_attempted == 0
+    note = " ".join(researcher.log.verification.unverifiable)
+    assert "not told to go ahead" in note
+    assert "missing rather than absent from the source" in note
+
+
+def test_with_no_one_to_ask_the_run_raises_rather_than_spending():
+    """A caller that cannot prompt -- the interface -- gets the plan handed to
+    it instead of a bill."""
+    from recomps.research.live import CONFIRM_ABOVE_LOOKUPS, LookupsNeedConfirmation
+
+    researcher, comps, profile = _capped_researcher(CONFIRM_ABOVE_LOOKUPS + 1)
+    researcher.confirm = None
+    with pytest.raises(LookupsNeedConfirmation) as raised:
+        researcher._fan_out(comps, profile)
+    assert raised.value.plan.lookups == CONFIRM_ABOVE_LOOKUPS + 1
+
+
+def test_an_answered_yes_proceeds_without_asking_again():
+    from recomps.research.live import CONFIRM_ABOVE_LOOKUPS
+
+    researcher, comps, profile = _capped_researcher(CONFIRM_ABOVE_LOOKUPS + 1)
+    researcher.confirm = True
+    researcher._fan_out(comps, profile)
+    assert researcher.log.lookups_attempted == CONFIRM_ABOVE_LOOKUPS + 1
+
+
+def _capped_researcher(count: int):
+    """A researcher whose fan-out has `count` targets and never actually looks
+    anything up."""
+    from recomps.config.profile import vacant_land_profile
+    from recomps.model.comp import SoldComp
+    from recomps.research.live import LiveResearcher, LiveRunLog
+
+    researcher = LiveResearcher.__new__(LiveResearcher)
+    researcher.max_lookups = None
+    researcher.via = "api"
+    researcher.workers = 1
+    researcher.log = LiveRunLog()
+    researcher._look_up = lambda comp: (comp, [], "")
+    researcher._needs_lookup = lambda comp, profile: True
+
+    comps = [
+        SoldComp(address=f"{i} Example St", sold_price=500_000.0,
+                 sold_date=date(2026, 7, 1), sources=["https://x.invalid/1"])
+        for i in range(count)
+    ]
+    return researcher, comps, vacant_land_profile("p")

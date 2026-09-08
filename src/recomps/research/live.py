@@ -142,6 +142,63 @@ def _report_active_attribution(diagnostics, active: list[ActiveListing]) -> None
     )
 
 
+#: Observed cost of reading one property page on the metered route, in US
+#: dollars. Measured across the reference runs and quoted in the README; it is
+#: an estimate for a warning, never a bill.
+COST_PER_LOOKUP_USD = 0.04
+#: Above this many lookups a run asks before spending. Below it the answer
+#: would always be yes, and a prompt nobody reads is worse than no prompt.
+CONFIRM_ABOVE_LOOKUPS = 25
+
+
+@dataclass
+class LookupPlan:
+    """What the fan-out is about to do, before it does any of it.
+
+    The index read is free and deterministic, so by the time this exists the
+    run knows exactly how many property pages it wants and can say so. The
+    count comes from the fetched page, which means the ceiling is set by the
+    site rather than by the user -- an index returning four thousand records
+    instead of forty would otherwise spend four thousand lookups without
+    anybody being asked.
+    """
+
+    lookups: int
+    via: str = "subscription"
+
+    @property
+    def estimated_cost_usd(self) -> float | None:
+        """Dollars, or None on the subscription route where there are none."""
+        if self.via != "api":
+            return None
+        return self.lookups * COST_PER_LOOKUP_USD
+
+    def describe(self) -> str:
+        cost = self.estimated_cost_usd
+        if cost is None:
+            return (
+                f"{self.lookups} properties need a page lookup. These are charged "
+                "to your Claude subscription, not billed per page."
+            )
+        return (
+            f"{self.lookups} properties need a page lookup, about "
+            f"${cost:,.2f} on your metered API account."
+        )
+
+
+class LookupsNeedConfirmation(RuntimeError):
+    """Raised when a run wants more lookups than it may spend unasked.
+
+    Carries the plan so a caller can show it and ask. Re-running after the
+    answer costs nothing extra: the index page is already in the page cache, so
+    the second attempt reaches this point without another request.
+    """
+
+    def __init__(self, plan: LookupPlan) -> None:
+        super().__init__(plan.describe())
+        self.plan = plan
+
+
 def _to_active_listing(row: dict) -> ActiveListing:
     """An index row on the for-sale side.
 
@@ -198,6 +255,8 @@ class LiveResearcher:
         page_chars: int = DEFAULT_PAGE_CHARS,
         enrich: bool = True,
         max_lookups: int | None = None,
+        via: str = "subscription",
+        confirm: object = None,
     ) -> None:
         self.fetcher = fetcher
         self.extractor = extractor
@@ -209,6 +268,11 @@ class LiveResearcher:
         #: out without spending a full run's budget. The comps beyond it keep
         #: whatever the index gave them and are reported as unenriched.
         self.max_lookups = max_lookups
+        self.via = via
+        #: Asked before the fan-out spends anything. `True` means "already
+        #: answered yes"; a callable is asked; `None` means never spend more
+        #: than the unattended ceiling.
+        self.confirm = confirm
         self.log = LiveRunLog()
 
     # -- step 1: the backbone ---------------------------------------------
@@ -341,9 +405,25 @@ class LiveResearcher:
                 f"at {self.max_lookups} lookups. Their attribution is missing rather "
                 "than absent from the source."
             )
-        self.log.lookups_attempted = len(targets)
         if not targets:
+            self.log.lookups_attempted = 0
             return []
+
+        plan = LookupPlan(lookups=len(targets), via=self.via)
+        if len(targets) > CONFIRM_ABOVE_LOOKUPS and self.confirm is not True:
+            answered = self.confirm(plan) if callable(self.confirm) else False
+            if not answered:
+                self.log.verification.unverifiable.append(
+                    f"{len(targets)} parcel(s) were not looked up: the run stopped "
+                    f"to ask before spending and was not told to go ahead. "
+                    "Their attribution is missing rather than absent from the source."
+                )
+                if not callable(self.confirm):
+                    raise LookupsNeedConfirmation(plan)
+                self.log.lookups_attempted = 0
+                return []
+
+        self.log.lookups_attempted = len(targets)
 
         claims: list[Claim] = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.workers) as pool:
@@ -472,6 +552,7 @@ def build_live_researcher(
     cache_ttl: float = 6 * 60 * 60,
     enrich: bool = True,
     max_lookups: int | None = None,
+    confirm: object = None,
 ) -> LiveResearcher:
     """Assemble the layer with sensible defaults."""
     from recomps.adapters.cache import PageCache
@@ -496,4 +577,6 @@ def build_live_researcher(
     return LiveResearcher(
         fetcher, extractor, geocoder, workers=workers, enrich=enrich,
         max_lookups=max_lookups,
+        via=via,
+        confirm=confirm,
     )
