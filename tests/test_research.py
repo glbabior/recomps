@@ -995,3 +995,80 @@ def _capped_researcher(count: int):
         for i in range(count)
     ]
     return researcher, comps, vacant_land_profile("p")
+
+
+# ---------------------------------------------------------------------------
+# Robots is checked on the URL that answers, not only the one requested
+# ---------------------------------------------------------------------------
+
+
+class RedirectingResponse(FakeResponse):
+    """A response that arrived from somewhere other than where it was asked."""
+
+    def __init__(self, status: int, text: str, final: str) -> None:
+        super().__init__(status, text)
+        self.url = final
+
+
+def test_a_redirect_onto_a_disallowed_path_is_not_kept(tmp_path, monkeypatch):
+    """Redirects are followed automatically, so the URL checked against
+    robots.txt is not necessarily the one that answered. This tool promises to
+    respect robots on every URL, which has to mean every URL fetched."""
+    asked = "https://example.test/listings/123"
+    landed = "https://example.test/private/123"
+    fetcher = _fetcher(tmp_path, {asked: RedirectingResponse(200, "secret", landed)})
+    fetcher.respect_robots = True
+    monkeypatch.setattr(fetcher.robots, "allows", lambda url: "/private/" not in url)
+
+    result = fetcher.fetch(asked)
+    assert result.blocked_by_robots, "the page it landed on is disallowed"
+    assert not result.text, "a disallowed page's content must not be returned"
+    assert fetcher.cache.get(asked, "1") is None, "nor cached"
+
+
+def test_a_redirect_within_allowed_paths_is_fine(tmp_path, monkeypatch):
+    asked = "https://example.test/listings/123"
+    landed = "https://example.test/listings/123/"
+    fetcher = _fetcher(tmp_path, {asked: RedirectingResponse(200, "page", landed)})
+    fetcher.respect_robots = True
+    monkeypatch.setattr(fetcher.robots, "allows", lambda url: True)
+
+    result = fetcher.fetch(asked)
+    assert result.ok and result.text == "page"
+
+
+# ---------------------------------------------------------------------------
+# A size field cannot stall the run
+# ---------------------------------------------------------------------------
+
+
+def test_an_absurdly_long_size_is_skipped_rather_than_parsed():
+    """The dimension pattern backtracks quadratically on input that nearly
+    matches. Measured on the real function: 0.30s at 4,000 characters, 1.18s at
+    8,000, 5.38s at 16,000. Nothing limits how long a fetched field can be."""
+    import time
+
+    from recomps.adapters.embedded import MAX_DIMENSION_CHARS, as_sqft
+
+    hostile = "1," * 50_000
+    started = time.perf_counter()
+    assert as_sqft(hostile) == (None, False)
+    assert time.perf_counter() - started < 0.5, "the cap must short-circuit"
+    assert MAX_DIMENSION_CHARS < 200
+
+
+@pytest.mark.parametrize(
+    "text,expected_sqft,rounded",
+    [
+        ("0.66 acres", 28749.6, True),
+        ("7,749 Sq Ft", 7749.0, False),
+        ("5.14 acres", 223898.4, True),
+        ("12,000 sq ft", 12000.0, False),
+    ],
+)
+def test_real_dimensions_still_parse(text, expected_sqft, rounded):
+    from recomps.adapters.embedded import as_sqft
+
+    sqft, was_acres = as_sqft(text)
+    assert sqft == pytest.approx(expected_sqft)
+    assert was_acres is rounded

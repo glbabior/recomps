@@ -236,6 +236,19 @@ class PoliteFetcher:
             except Exception as exc:
                 last = FetchResult(url=url, error=f"{type(exc).__name__}: {exc}")
             else:
+                # Redirects are followed automatically, so the URL that was
+                # checked against robots.txt is not necessarily the one that
+                # answered. A site can redirect an allowed path onto a
+                # disallowed one, and this tool promises in writing to respect
+                # robots on every URL -- which has to mean every URL fetched,
+                # not merely every URL requested.
+                final = str(getattr(response, "url", url))
+                if (
+                    self.respect_robots
+                    and final != url
+                    and not self.robots.allows(final)
+                ):
+                    return FetchResult(url=final, blocked_by_robots=True)
                 last = FetchResult(
                     url=url, status=response.status_code, text=response.text
                 )

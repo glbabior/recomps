@@ -23,10 +23,13 @@ dependencies = [
 # framework: the workers here are bounded extraction tasks against a strict
 # schema, and the fetching has to stay on this machine so the politeness
 # rules are actually enforceable.
+# httpx2 is pinned to the major version this code has actually run against.
+# ">=0.1" spanned two majors of the library that makes every outbound request,
+# so a fresh install could resolve something the code has never seen.
 # pydantic defines the extraction schemas the workers must return. It
 # arrives with the Anthropic SDK too, but this layer imports it directly,
 # so it is declared rather than inherited by luck.
-live = ["anthropic>=1.0", "httpx2>=0.1", "pydantic>=2.0"]
+live = ["anthropic>=1.0", "httpx2>=2.0,<3", "pydantic>=2.0"]
 dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.6"]
 # The interface. Kept optional so the engine, the CLI and the whole test
 # suite install and run without it. pandas arrives with Streamlit anyway, but

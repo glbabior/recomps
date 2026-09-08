@@ -163,7 +163,17 @@ def as_sqft(value: Any) -> tuple[float | None, bool]:
         return None, False
     if isinstance(value, (int, float)):
         return float(value), False
-    match = _DIMENSION.search(str(value))
+    text = str(value)
+    if len(text) > MAX_DIMENSION_CHARS:
+        # The pattern backtracks quadratically on input that nearly matches --
+        # digits and separators that never reach a unit. Measured on the real
+        # function: 0.30s at 4,000 characters, 1.18s at 8,000, 5.38s at 16,000,
+        # four times the work for twice the input. Nothing limits how long a
+        # fetched field can be, so a site returning a long run of digits where
+        # a lot size belongs would stall a run for hours without erroring.
+        # A real dimension is under twenty characters.
+        return None, False
+    match = _DIMENSION.search(text)
     if not match:
         return None, False
     try:
@@ -175,6 +185,9 @@ def as_sqft(value: Any) -> tuple[float | None, bool]:
         return amount * SQFT_PER_ACRE, True
     return amount, False
 
+
+#: Longest plausible dimension string. See `as_sqft` for why a cap exists.
+MAX_DIMENSION_CHARS = 100
 
 #: Licence-number labels that trail an agent name in attribution strings.
 LICENCE_LABEL = re.compile(
