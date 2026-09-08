@@ -1068,8 +1068,8 @@ def results_panel(market, profile: CompProfile) -> None:
 
     _excluded(current)
     _core_view(current)
+    _ladder(current, profile)
     _size_bands(current)
-    _ladder(current)
     _areas(current, market)
     _agents(current)
     _comps_table(market, profile, current)
@@ -1243,7 +1243,7 @@ def _predates(current: ui_state.Viewing, what: str) -> None:
     st.caption(f"This saved run predates {what}. Run the search again to see it.")
 
 
-def _ladder(current: ui_state.Viewing) -> None:
+def _ladder(current: ui_state.Viewing, profile: CompProfile | None = None) -> None:
     """How the estimate moves as "similar size" is drawn wider.
 
     Sits under the size bands because it answers the next question those raise:
@@ -1254,7 +1254,12 @@ def _ladder(current: ui_state.Viewing) -> None:
     if not rows:
         _predates(current, "the widening-bracket table")
         return
-    with st.expander("How wide is “similar”?", expanded=False):
+    # Open by default: the headline estimate is one row of this table, so it is
+    # not supporting detail, it is the working.
+    measure = "Lot size"
+    if profile is not None and profile.metric is not Denominator.LOT_SQFT:
+        measure = "Living area"
+    with st.expander(f"{measure} bands — where the estimate comes from", expanded=True):
         st.caption(
             "The same sales, read at widening size ranges around your property. "
             "Every row is a correct answer to a slightly different question — a "

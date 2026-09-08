@@ -1414,3 +1414,26 @@ def test_every_sort_option_keeps_every_comp(result, order):
     ordered = app_mod._sorted_comps(rows, order)
     assert len(ordered) == len(rows)
     assert {r["address"] for r in ordered} == {r["address"] for r in rows}
+
+
+def test_the_bands_the_estimate_comes_from_are_shown_first_and_open(result):
+    """The headline is one row of that table, so it is the working rather than
+    supporting detail — and it comes before the quantile bands, which answer a
+    different question."""
+    from recomps.ui import app as app_mod
+
+    source = Path(app_mod.__file__).read_text(encoding="utf-8")
+    body = source.split("def results_panel")[1]
+    assert body.index("_ladder(current, profile)") < body.index("_size_bands(current)")
+    panel = source.split("def _ladder(")[1][:2500]
+    assert 'bands — where the estimate comes from", expanded=True' in panel
+
+
+def test_the_band_label_follows_the_profile_s_measure(result):
+    """A condo is priced on living area, so calling its ranges lot sizes would
+    be wrong."""
+    from recomps.ui import app as app_mod
+
+    source = Path(app_mod.__file__).read_text(encoding="utf-8")
+    panel = source.split("def _ladder(")[1][:2500]
+    assert '"Lot size"' in panel and '"Living area"' in panel
