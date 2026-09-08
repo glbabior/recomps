@@ -84,14 +84,23 @@ def test_local_references_point_at_populated_cells(workbook_path):
 
 
 def test_no_formula_divides_by_a_possibly_empty_cell(workbook_path):
-    """Every division either guards with IF or divides by a data column."""
+    """Every division is guarded.
+
+    This test used to accept any division whose denominator looked like a cell
+    reference, which let `=C27/D27` through -- and that is exactly the formula
+    that broke. A sale with no published size renders an em dash, dividing by
+    it returns #VALUE!, and one such cell poisons every aggregate over the
+    column: the average, the median, the min, the max and the core view all
+    came back as errors. LibreOffice caught it in CI; nothing offline did.
+    """
     wb = load_workbook(workbook_path)
+    problems = []
     for ws, cell in _formula_cells(wb):
         if "/" not in cell.value:
             continue
-        assert "IF(" in cell.value or "!" in cell.value or re.search(
-            r"/\$?[A-Z]{1,2}\$?\d+", cell.value
-        ), f"{ws.title}!{cell.coordinate}: unguarded division in {cell.value}"
+        if "IF(" not in cell.value:
+            problems.append(f"{ws.title}!{cell.coordinate}: {cell.value}")
+    assert not problems, "unguarded division(s):\n" + "\n".join(problems)
 
 
 @pytest.mark.skipif(
