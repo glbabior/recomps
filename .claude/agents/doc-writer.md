@@ -58,6 +58,17 @@ Specifically: verify command names and flags by running `--help`; verify numbers
 by running the thing; verify a described file layout by listing it. If you
 cannot verify a claim, either leave it out or mark it explicitly as untested.
 
+**A promise in the docs is a testable claim, so test it.** "The engine and the
+whole test suite install and run without any of the extras" is not prose; it is
+an assertion a stranger will rely on when they clone this. It was false for
+months — a library arrived transitively on every machine anyone tried, and on a
+clean install the suite would not even import. Where the docs promise a
+behaviour, execute it in the state the promise describes, not the state your
+machine happens to be in.
+
+Counts age the fastest. A test count, a record count, a sold total: run the
+thing and read the number rather than carrying it forward.
+
 When you find the code and the docs disagree, say which one you think is wrong
 rather than quietly rewriting the docs to match a bug.
 

@@ -30,6 +30,23 @@ condo's unit is its identity, a lot's is an MLS artifact.
 contain a literal cell reference. Columns resolve through `workbook/schema.py`,
 because a profile change reshapes the sheet. Grep for it.
 
+**A formula that breaks on a missing value.** This is the other half of the
+rule below, and the expensive half. "Not found" renders as an em dash, and
+arithmetic on an em dash returns `#VALUE!` — which then propagates into every
+aggregate that reads the column. One sale with no published size once turned
+the average, the median, the min, the max and the core view into errors at
+once. So: any per-row formula that divides or multiplies must be guarded with
+`ISNUMBER`, and any aggregate over a column that can hold a blank must step
+over it rather than multiply it. `SUMPRODUCT` multiplies a blank as text and
+fails; `AVERAGEIFS` steps over it. Check both the row formula and every cell
+that reads its column.
+
+**A dependency that arrives by luck.** Every third-party import must be
+declared in the extra it belongs to. A library that arrives transitively — as
+`pydantic` did, riding in with the Anthropic SDK — works on every developer
+machine and fails on a clean install, which is the one configuration no one
+tries.
+
 **Filling a gap instead of reporting it.** A missing agent, price or size must
 end up as `None`, render as an em dash, and be counted as not found. Any code
 path that substitutes a default, an average, or a plausible guess is a serious
@@ -62,6 +79,19 @@ actually wrong rather than merely unfamiliar. Run the tests. Run the private
 regression suite too if a private market repo is beside this one — it pins
 real numbers, and a change that moves one of them is the highest-signal finding
 available.
+
+**Check CI, not just the local suite.** Local green and CI green are different
+claims. The pipeline can fail for reasons that never reach a developer's
+machine — a runner image change, a missing declared dependency, a check that
+only runs there — and it stays failing until somebody looks. `gh run list`
+costs one command. This repo once ran red for six days while every local suite
+passed.
+
+**Make each new test fail before trusting it.** For any test guarding a fix,
+put the bug back and watch it fail. A test that passes either way is worse than
+no test: it advertises a guarantee it does not provide. One test here accepted
+the exact formula it existed to forbid, because its condition was satisfied by
+any division that merely looked like a cell reference.
 
 Verify before reporting. For each candidate, construct the specific inputs that
 would produce the wrong output. If you cannot, say the finding is unconfirmed

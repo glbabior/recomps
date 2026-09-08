@@ -13,6 +13,18 @@ The primary risk here is not a remote attacker. It is **the owner publishing
 something they cannot unpublish.** Treat leakage as the highest-severity class
 of finding, above everything else.
 
+## A new dependency is a new surface
+
+Every addition to `pyproject.toml` is code that will run on the owner's machine
+with their credentials in the environment, and on any machine that clones this.
+When a dependency appears in a diff, say what it is for and whether the job
+could be done without it.
+
+Watch for the reverse case too: a library that is *used* but never *declared*,
+arriving transitively through something else. That is not merely untidy — it
+means the dependency footprint on a clean install is not what the manifest
+says, and nobody has reviewed what actually gets installed.
+
 ## Leakage — check this first, every time
 
 The public repository must contain no real address, street name, agent name,
