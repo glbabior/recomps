@@ -342,7 +342,11 @@ def test_a_run_is_labelled_in_local_time():
     record = history_mod.RunRecord(
         market="m", profile="p", run_at=when, directory=Path("x")
     )
-    assert record.label == to_local(when).strftime("%Y-%m-%d %H:%M")
+    # Twelve-hour, and the hour is not zero-padded: "1:40 PM", not "01:40 PM".
+    assert record.label == to_local(when).strftime("%Y-%m-%d %I:%M %p").replace(
+        " 0", " ", 1
+    )
+    assert "AM" in record.label or "PM" in record.label
     assert record.local_date == to_local(when).strftime("%Y-%m-%d")
 
 

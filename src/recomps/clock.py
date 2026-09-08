@@ -37,6 +37,17 @@ def local_date(moment: datetime) -> date:
     return to_local(moment).date()
 
 
-def local_stamp(moment: datetime, fmt: str = "%Y-%m-%d %H:%M") -> str:
+#: Twelve-hour, because that is how the owner reads a clock. Written out
+#: rather than using a %-I / %#I directive, which differ between platforms.
+CLOCK_FORMAT = "%Y-%m-%d %I:%M %p"
+
+
+def local_stamp(moment: datetime, fmt: str = CLOCK_FORMAT) -> str:
     """A run's time as someone who was there would write it."""
-    return to_local(moment).strftime(fmt)
+    local = to_local(moment)
+    text = local.strftime(fmt)
+    # "01:40 PM" reads as a timestamp; "1:40 PM" reads as a time. Done by
+    # substitution rather than a %-I / %#I directive, which is not portable.
+    if "%I" in fmt and local.strftime("%I").startswith("0"):
+        text = text.replace(local.strftime("%I"), local.strftime("%I")[1:], 1)
+    return text

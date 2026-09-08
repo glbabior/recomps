@@ -134,6 +134,8 @@ These are real failures from real runs, and the reason each guard exists.
 
 **Nothing is rounded before it is used.** Every valuation multiplies an unrounded rate by a size. Rounding $/sqft to the two decimals that get displayed shifts the resulting valuation by tens of dollars, and quietly breaks any regression test built on real numbers.
 
+**The floor comes off the same bracket as everything else.** The walk-away figure sits a fixed margin below the estimate, so it describes the property being sold rather than an average-sized one — a market-wide basis would carry the same understatement the bracket exists to correct. One consequence is worth expecting: the recommended list price can land *below* the floor, because it drops to the search-band edge beneath the anchor and the anchor can sit just above one. The run says so when it happens, and it means what it says — that list price is there to attract bidding, not to be accepted.
+
 **List price is bait, not a ceiling.** In this market the sold-to-ask distribution has two tails: under-priced listings get bid up well above ask, while over-priced ones take serial cuts and still close below the reduced ask. That is why the recommended strategy prices just under a search-band edge — buyers filter by price band, and reaching the band below costs less than it appears to.
 
 **Size is shown next to rate, always.** Every table that reports a rate reports the size that produced it. A quadrant can carry higher absolute prices *and* a lower average $/sqft purely because its parcels are larger; without the size column beside it, a naive rate comparison inverts the real premium.

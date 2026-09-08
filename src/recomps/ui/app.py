@@ -960,7 +960,7 @@ def _offer_a_finished_run(market, profile: CompProfile) -> None:
     """
     from datetime import UTC, datetime, timedelta
 
-    from recomps.clock import to_local
+    from recomps.clock import local_stamp
 
     try:
         records = history_mod.list_runs(
@@ -976,7 +976,8 @@ def _offer_a_finished_run(market, profile: CompProfile) -> None:
         return
 
     st.info(
-        f"A run of this search finished at {to_local(newest.run_at):%H:%M} and is "
+        f"A run of this search finished at {local_stamp(newest.run_at, '%I:%M %p')} "
+        "and is "
         "saved, but is not on screen — a long run can complete after its page "
         "has gone. Nothing needs re-running."
     )

@@ -36,7 +36,8 @@ DEFAULT_SEARCH_BAND = 50_000
 UNDERCUT = 1_000
 #: Strategy C premium over the primary anchor.
 ANCHOR_PREMIUM = 0.055
-#: The floor sits this far below the conservative (all-sold median) basis.
+#: The floor sits this far below the primary anchor -- the median of the
+#: similar-size bracket, the same figure the list prices are built from.
 FLOOR_DISCOUNT = 0.05
 
 DISCLAIMER = (
@@ -129,7 +130,11 @@ def build_guidance(
     valuation: Valuation, sold_to_ask: SoldToAskStats, ratios: list[float]
 ) -> Guidance:
     primary = valuation.primary
-    conservative = valuation.by_key("all_sold_median")
+    # The floor comes off the same bracket the three list prices do. It used to
+    # sit below the all-sold median, which priced the subject as an
+    # average-sized parcel -- the exact understatement the similar-size bracket
+    # exists to correct, and inconsistent with every other figure here.
+    conservative = primary or valuation.by_key("all_sold_median")
     anchor = primary.value if primary else None
 
     if anchor is None:
@@ -194,7 +199,7 @@ def build_guidance(
     basis = "no conservative basis available"
     if conservative and conservative.value:
         floor = round(conservative.value * (1 - FLOOR_DISCOUNT), -3)
-        basis = f"{FLOOR_DISCOUNT:.0%} below the all-sold-median basis"
+        basis = f"{FLOOR_DISCOUNT:.0%} below the estimate"
 
     warnings: list[str] = []
     # Strategy A drops to the next search-band edge below the anchor. When the
