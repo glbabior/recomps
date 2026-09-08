@@ -45,9 +45,11 @@ CLOCK_FORMAT = "%Y-%m-%d %I:%M %p"
 def local_stamp(moment: datetime, fmt: str = CLOCK_FORMAT) -> str:
     """A run's time as someone who was there would write it."""
     local = to_local(moment)
-    text = local.strftime(fmt)
-    # "01:40 PM" reads as a timestamp; "1:40 PM" reads as a time. Done by
-    # substitution rather than a %-I / %#I directive, which is not portable.
-    if "%I" in fmt and local.strftime("%I").startswith("0"):
-        text = text.replace(local.strftime("%I"), local.strftime("%I")[1:], 1)
-    return text
+    # "01:40 PM" reads as a timestamp; "1:40 PM" reads as a time. The hour is
+    # substituted into the format before formatting, not replaced in the result
+    # afterwards: at 05:30 on the 5th, "05" appears in the date first, and
+    # replacing it there yields "2026-09-5". A %-I / %#I directive would be
+    # simpler and is not portable.
+    if "%I" in fmt:
+        fmt = fmt.replace("%I", local.strftime("%I").lstrip("0") or "12")
+    return local.strftime(fmt)

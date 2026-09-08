@@ -458,3 +458,25 @@ def test_a_market_s_own_search_cannot_be_renamed(config_dir):
     from recomps.config.store import rename_user_profile
 
     assert rename_user_profile("demoville", "demo-lots", "mine") is False
+
+
+def test_the_hour_is_unpadded_without_mangling_the_date():
+    """Stripping the leading zero from the result instead of the format turned
+    05:30 on the 5th into "2026-09-5 05:30 AM" — the first "05" is in the date.
+    It passed in one timezone and failed in another, which is why CI found it
+    and a laptop did not."""
+    from recomps.clock import local_stamp, to_local
+
+    for moment in (
+        datetime(2026, 9, 5, 5, 30, tzinfo=UTC),
+        datetime(2026, 9, 5, 12, 30, tzinfo=UTC),
+        datetime(2026, 10, 10, 17, 10, tzinfo=UTC),
+        datetime(2026, 1, 1, 0, 5, tzinfo=UTC),
+    ):
+        stamp = local_stamp(moment)
+        local = to_local(moment)
+        assert stamp.startswith(local.strftime("%Y-%m-%d")), stamp
+        assert stamp.endswith(("AM", "PM")), stamp
+        hour = stamp[11:].split(":")[0]
+        assert not hour.startswith("0"), stamp
+        assert hour == local.strftime("%I").lstrip("0"), stamp
