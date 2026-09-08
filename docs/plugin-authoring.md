@@ -86,9 +86,38 @@ ns_centerline = [
 name = "example-aggregator"
 adapter = "example"
 role = "Primary sold comps"
+url = "https://example.invalid/sold/"
 rate_limit_seconds = 3.0
+side = "sold"                  # or "active"; omitted means sold
 quirks = ["Whatever this source does that will bite you."]
+
+[sources.embedded]
+script_id = "__NEXT_DATA__"
+records_path = "props.searchData.homes"
+url_base = "https://example.invalid"
+total_path = "props.searchData.totalHomes"
+
+[sources.embedded.fields]
+address = { path = "location.streetAddress", transform = "text" }
+sold_price = { path = "price.formattedPrice", transform = "money" }
+lot_sqft = { path = "lotSize.formattedDimension", transform = "sqft" }
 ```
+
+Three keys decide more than they look like they do:
+
+**`side`** says which half of the market this source describes. Omit it and the
+source is the sold backbone; a market with no `side = "active"` source collects
+no listings at all, however many it fetches. It is declared rather than inferred
+from the name or the role text, so your wording never becomes load-bearing.
+
+**`total_path`** is the dotted path to the site's own count of results for this
+search. Declare it and every run compares what it extracted against what the
+page claims, and reports a short page as incomplete rather than letting it read
+as a small market. One index claimed 166 properties and served nine.
+
+**`url_base`** is the only site a record is allowed to link to. A record's URL
+comes from the page being read and is fetched next from the machine running
+this, so a URL pointing anywhere else is dropped and reported.
 
 ## Fixtures
 

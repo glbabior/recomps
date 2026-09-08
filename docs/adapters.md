@@ -6,16 +6,43 @@ This document is the contract an adapter has to meet, and the failure modes it h
 
 ## The contract
 
-```python
-class SourceAdapter(Protocol):
-    name: str
+There is no `SourceAdapter` class to implement. The seam is one method, in `recomps/research/base.py`:
 
-    def fetch_sold(self, market, profile, window_start, window_end) -> list[SoldComp]: ...
-    def fetch_active(self, market, profile) -> list[ActiveListing]: ...
-    def fetch_property(self, address: str) -> dict: ...   # attribution, history, coords
+```python
+class Researcher(Protocol):
+    def gather(self, market, profile, window_start, window_end) -> Dataset: ...
 ```
 
-Anything an adapter returns is untrusted until the deterministic layer has filtered it.
+Two implementations ship: `FixtureResearcher` replays recorded JSON, `LiveResearcher` reads the web. A market plugin does not write either. It **describes its sources in `market.toml`**, and `LiveResearcher` reads whatever is described:
+
+```toml
+[[sources]]
+name = "somewhere-sold"
+adapter = "nextdata"
+role = "Primary sold backbone"
+url = "https://example.invalid/sold/"
+rate_limit_seconds = 3.0
+side = "sold"                  # or "active"; omitted means sold
+
+[sources.embedded]
+script_id = "__NEXT_DATA__"
+records_path = "props.searchData.homes"
+url_base = "https://example.invalid"
+total_path = "props.searchData.totalHomes"
+
+[sources.embedded.fields]
+address = { path = "location.streetAddress", transform = "text" }
+sold_price = { path = "price.formattedPrice", transform = "money" }
+lot_sqft = { path = "lotSize.formattedDimension", transform = "sqft" }
+```
+
+Three of those keys carry the weight:
+
+- **`side`** decides which half of the market a source describes. It is declared, not guessed from the name or the role text, so a market's wording never becomes load-bearing. Without it a source is the sold backbone, and the active side stays empty.
+- **`total_path`** is where the page states its own result count. Declare it and every run checks what it extracted against what the page claims.
+- **`url_base`** is the site a record may link to. A record's URL is chosen by the site being read and is fetched next from this machine, so anything pointing elsewhere is dropped and reported.
+
+Everything a record yields is untrusted until the deterministic layer has filtered it — and it stays untrusted afterwards. It is written to the workbook as text, never as something a spreadsheet will execute.
 
 ## Non-negotiables
 
@@ -31,13 +58,15 @@ Anything an adapter returns is untrusted until the deterministic layer has filte
 
 ## Failure modes every adapter must handle
 
-**The partially-rendered page.** Search pages routinely render only their first seven or eight results server-side and build the rest in JavaScript. A fetcher sees a page that looks complete and is missing most of the data. An adapter must never treat a fetched page as the whole result set — cross-check the count against a second source and record the disagreement as a diagnostic.
+**The partially-rendered page.** Search pages routinely render only their first seven or eight results server-side and build the rest in JavaScript. A fetcher sees a page that looks complete and is missing most of the data. One index claimed 166 properties and served nine. The first guard is the page against itself: declare `total_path` and the extraction is compared to the site's own count, so a short page is reported as incomplete rather than read as a small market. Cross-checking a second source remains the backstop.
 
 **Pagination that skips.** Some paginated indexes drop entries between pages. Same guard: a second source and a count comparison.
 
 **Rounded acreage.** An index that publishes acreage to two decimals gives you ±4% of $/sqft on a small parcel. Set `lot_size_is_rounded=True` so the caveat travels with the number rather than being silently lost.
 
-**Duplicate and phantom rows.** The same sale listed twice, or an anomalous interim "sold" row for a property that later sold again. Deduplicate on the normalized address and verify against price and date.
+**Duplicate and phantom rows.** The same sale listed twice — once bare and once with an MLS lot number appended — or an anomalous interim "sold" row for a property that later sold again.
+
+Do not deduplicate on the address. That was tried and it deleted a real sale: two genuinely different parcels can share one street address, and one observed pair, 3.9 and 5.14 acres, was listed simultaneously two hundred thousand dollars apart. The address selects candidates; **price decides**, with size breaking the tie when a price is missing. Rows that cannot be compared collapse, which preserves the behaviour the rule was written for. Two real sales at one address are both kept and the sharing is reported, because it looks exactly like a duplicate and must not be quietly treated as one.
 
 **Stale attribution.** Property pages happily attribute a transaction from decades ago. Every attribution must be checked against the sale price and date already known for that parcel before it is accepted.
 

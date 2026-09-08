@@ -12,9 +12,12 @@ htmlcov/
 out/
 runs/
 *.xlsx
-!src/lotcomps/markets/demoville/**/*.xlsx
+!src/recomps/markets/demoville/**/*.xlsx
 !tests/golden/**/*.xlsx
 .env
 
-# Run output, never source
-src/lotcomps/markets/*/data/
+# Run output and the page cache, never source. The package was renamed from
+# lotcomps to recomps and these rules were not, so a live run's cached pages
+# under src/recomps/markets/*/data/http-cache/ matched nothing and would have
+# been committed. Only the CI privacy job stood between that and a push.
+src/recomps/markets/*/data/
