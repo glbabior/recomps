@@ -910,3 +910,34 @@ def test_a_recording_replayed_through_a_later_window_says_what_it_lost(tmp_path)
     # The last recorded sale is explained, not dropped in as a bare date.
     assert "is the last sale in it, not a setting" in note
     assert "--as-of" not in note, "a command-line flag is meaningless on a screen"
+
+
+def test_the_ladder_multiplies_by_the_metric_not_the_bracket_attribute():
+    """A profile may bracket on lot size while pricing on living area. Using
+    one size for both multiplies a $/living-sqft rate by a lot size and reports
+    a valuation several times too high — as a clean number beside a correct
+    one, which is the expensive kind of wrong."""
+    from recomps.config.profile import (
+        Denominator,
+        PropertyType,
+        SimilarBracket,
+        improved_profile,
+    )
+
+    profile = improved_profile("condo", PropertyType.CONDO_TOWNHOME)
+    profile.subject = Subject(living_sqft=2000.0, lot_sqft=8000.0, label="Yours")
+    profile.similar_bracket = SimilarBracket(
+        attribute=Denominator.LOT_SQFT, tolerance=0.25
+    )
+    sold = [
+        SoldComp(address=f"{i} Example St", living_sqft=2000.0, lot_sqft=8000.0,
+                 sold_price=1_600_000.0, sold_date=date(2026, 7, 1))
+        for i in range(6)
+    ]
+
+    ladder = build_bracket_ladder(sold, profile)
+    marked = next(r for r in ladder.rows if r.is_profile_bracket)
+    primary = value_subject(sold, [], profile).primary
+
+    assert marked.value_from_median == pytest.approx(1_600_000.0)
+    assert marked.value_from_avg == pytest.approx(primary.value)

@@ -99,7 +99,7 @@ def _rung(
     label: str,
     comps: list[SoldComp],
     denominator: str,
-    subject_size: float,
+    value_size: float,
     low: float | None,
     high: float | None,
 ) -> LadderRung:
@@ -115,8 +115,8 @@ def _rung(
         avg_ppsf=mean,
         # Unrounded rates, as everywhere: rounding to the displayed cents moves
         # the answer by tens of dollars.
-        value_from_median=median * subject_size if median is not None else None,
-        value_from_avg=mean * subject_size if mean is not None else None,
+        value_from_median=median * value_size if median is not None else None,
+        value_from_avg=mean * value_size if mean is not None else None,
     )
 
 
@@ -126,8 +126,16 @@ def build_bracket_ladder(sold: list[SoldComp], profile: CompProfile) -> BracketL
     bracket = profile.similar_bracket
     attribute = bracket.attribute.value
     denominator = profile.metric.value
+    # Two different sizes, deliberately, exactly as `valuation.py` keeps them
+    # apart: the bracket's attribute decides which comps a rung *contains*,
+    # and the profile's metric is what a rate is multiplied by. They are the
+    # same number for land, and are not for an improved property priced on
+    # living area while bracketed on lot size -- where using one for both
+    # multiplies a $/living-sqft rate by a lot size and reports a valuation
+    # several times too high, as a clean number beside a correct one.
     subject_size = profile.subject.size_for(bracket.attribute)
-    if subject_size is None:
+    value_size = profile.subject_size()
+    if subject_size is None or value_size is None:
         ladder.notes.append(
             "No subject size, so there is no centre to widen a bracket around."
         )
@@ -162,7 +170,7 @@ def build_bracket_ladder(sold: list[SoldComp], profile: CompProfile) -> BracketL
             f"{name}  ({low:,.0f}-{high:,.0f} sqft)",
             within(low, high),
             denominator,
-            subject_size,
+            value_size,
             low,
             high,
         )
@@ -170,7 +178,7 @@ def build_bracket_ladder(sold: list[SoldComp], profile: CompProfile) -> BracketL
         ladder.rows.append(rung)
 
     everything = _rung(
-        f"every sale ({len(sold)})", sold, denominator, subject_size, None, None
+        f"every sale ({len(sold)})", sold, denominator, value_size, None, None
     )
     everything.is_all_sold = True
     ladder.rows.append(everything)
