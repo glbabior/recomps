@@ -12,6 +12,10 @@ from datetime import date
 
 import pytest
 
+# The research layer's schemas need pydantic, which ships with the "live"
+# extra. Everything else in this file runs on a bare install.
+pytest.importorskip("pydantic", reason="the live layer is an optional extra")
+
 from recomps.adapters.cache import CacheEntry, PageCache
 from recomps.adapters.embedded import (
     EmbeddedSpec,

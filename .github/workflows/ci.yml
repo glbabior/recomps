@@ -33,7 +33,10 @@ jobs:
           enable-cache: true
           cache-dependency-glob: pyproject.toml
       - name: Install
-        run: uv pip install --system -e ".[dev]"
+        # Every extra, so the suite exercises the research layer and the
+        # interface rather than skipping them. The bare-install promise is
+        # covered by the offline demo job below.
+        run: uv pip install --system -e ".[dev,live,ui]"
       - name: Check the interpreter is the one we asked for
         run: python -c "import sys; assert sys.version.startswith('${{ matrix.python }}'), sys.version"
       - name: Lint
