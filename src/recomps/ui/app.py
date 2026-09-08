@@ -589,25 +589,21 @@ def _can_research(market) -> bool:
 def confirmation_panel() -> bool:
     """The run stopped to ask. Returns True when it is waiting on an answer.
 
-    Rendered above the tabs, not inside the one that started the run. A run
-    that pauses looks exactly like a run that did nothing: the progress box
-    disappears, no results arrive, and the only sign is a panel the reader has
-    to go looking for. Whatever the page is waiting on belongs at the top of
-    the page.
+    Rendered above the tabs so that whatever the page is waiting on is the
+    first thing on it, but deliberately plain: this is a question with two
+    answers, not an alarm.
     """
     pending = st.session_state.get("pending_plan")
     if not pending:
         return False
 
-    st.warning("**This run stopped to ask before spending.**")
-    st.markdown(md(f"### {pending}"))
+    st.warning(md(pending))
     st.caption(
-        "Reading the index cost nothing and is already done. This is the part "
+        "The index has been read already and cost nothing. This is the part "
         "that spends, and the number of properties came from the site rather "
-        "than from you — so it is worth seeing before it happens. Saying yes "
-        "does not re-read anything: the pages already fetched are cached."
+        "than from you — so it is worth seeing before it happens."
     )
-    columns = st.columns([1, 1, 4])
+    columns = st.columns([1, 1, 3])
     if columns[0].button("Go ahead", type="primary"):
         st.session_state["lookups_ok"] = True
         st.session_state.pop("pending_plan", None)
@@ -947,9 +943,61 @@ def _show_comparison(earlier, later) -> None:
 # ---------------------------------------------------------------------------
 
 
+#: A run archived within this many minutes is recent enough that somebody is
+#: probably still looking for it.
+RECENT_RUN_MINUTES = 60
+
+
+def _offer_a_finished_run(market, profile: CompProfile) -> None:
+    """Point at a run that finished but is not on screen.
+
+    A run writes its snapshot and workbook to the archive before the interface
+    displays anything, so the two can come apart: a long live run that loses
+    its browser session completes on the server and leaves a finished archive
+    nobody is shown. From the screen it is indistinguishable from a run that
+    never happened, which is the worst way for a tool to be wrong -- the work
+    is done and paid for and the reader is told nothing.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from recomps.clock import to_local
+
+    try:
+        records = history_mod.list_runs(
+            market.data_dir(), market.name, profile.name
+        )
+    except Exception:
+        return
+    if not records:
+        return
+    newest = records[0]
+    cutoff = datetime.now(UTC) - timedelta(minutes=RECENT_RUN_MINUTES)
+    if newest.run_at < cutoff or newest.snapshot is None:
+        return
+
+    st.info(
+        f"A run of this search finished at {to_local(newest.run_at):%H:%M} and is "
+        "saved, but is not on screen — a long run can complete after its page "
+        "has gone. Nothing needs re-running."
+    )
+    if st.button(f"Show the run from {newest.label}", type="primary"):
+        current = view()
+        try:
+            current.stored = ui_state.open_saved(newest)
+        except Exception as exc:
+            st.error(str(exc))
+            return
+        current.origin = "saved"
+        current.record = newest
+        current.result = None
+        current.adjustments.clear()
+        st.rerun()
+
+
 def results_panel(market, profile: CompProfile) -> None:
     current = view()
     if current.result is None and current.stored is None:
+        _offer_a_finished_run(market, profile)
         return
 
     st.divider()

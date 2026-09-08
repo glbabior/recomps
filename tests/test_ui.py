@@ -1270,7 +1270,7 @@ def test_a_run_waiting_to_be_asked_says_so_above_everything(config_dir, browsabl
     app.run()
 
     assert not app.exception
-    assert any("stopped to ask" in w.value for w in app.warning)
+    assert any("page lookup" in w.value for w in app.warning)
     labels = [b.label for b in app.button]
     assert "Go ahead" in labels and "Stop" in labels
     assert not app.tabs, "nothing else competes with the question"
@@ -1309,3 +1309,49 @@ def test_saying_stop_leaves_no_question_and_no_permission(config_dir, runnable):
     assert "lookups_ok" not in app.session_state, (
         "declining must not leave permission behind"
     )
+
+
+def test_a_finished_run_that_never_reached_the_screen_is_offered(
+    config_dir, tmp_path, result, monkeypatch
+):
+    """A run writes its archive before anything is displayed, so the two can
+    come apart: a long live run that loses its browser session completes on the
+    server and leaves a finished archive nobody is shown. From the screen that
+    is indistinguishable from a run that never happened."""
+    from datetime import UTC, datetime
+
+    from recomps.model.snapshot import build_snapshot
+    from recomps.reporting import history as history_mod
+    from recomps.ui import app as app_mod
+
+    directory = history_mod.run_dir(
+        tmp_path, "demoville", "demo-lots", datetime.now(UTC)
+    )
+    directory.mkdir(parents=True)
+    build_snapshot(result).write(directory / history_mod.SNAPSHOT_NAME)
+
+    records = history_mod.list_runs(tmp_path, "demoville", "demo-lots")
+    assert records, "the run is archived"
+    assert records[0].snapshot is not None
+    # Recent enough that somebody is still looking for it.
+    age = (datetime.now(UTC) - records[0].run_at).total_seconds() / 60
+    assert age < app_mod.RECENT_RUN_MINUTES
+
+
+def test_an_old_run_is_not_offered_as_though_it_just_finished(
+    config_dir, tmp_path, result
+):
+    from datetime import UTC, datetime, timedelta
+
+    from recomps.model.snapshot import build_snapshot
+    from recomps.reporting import history as history_mod
+    from recomps.ui import app as app_mod
+
+    stale = datetime.now(UTC) - timedelta(minutes=app_mod.RECENT_RUN_MINUTES + 30)
+    directory = history_mod.run_dir(tmp_path, "demoville", "demo-lots", stale)
+    directory.mkdir(parents=True)
+    build_snapshot(result).write(directory / history_mod.SNAPSHOT_NAME)
+
+    newest = history_mod.list_runs(tmp_path, "demoville", "demo-lots")[0]
+    age = (datetime.now(UTC) - newest.run_at).total_seconds() / 60
+    assert age > app_mod.RECENT_RUN_MINUTES, "too old to be what someone is waiting for"
