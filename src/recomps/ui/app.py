@@ -529,6 +529,14 @@ def profile_editor(market, existing: CompProfile | None) -> None:
         return
 
     if editing and existing.name != name:
+        # Check the name is free BEFORE moving anything. The archive move and
+        # the profile rekey are two steps and cannot be made atomic, so the one
+        # that can fail has to fail first: moving the runs and then discovering
+        # the name was taken left the old search with no history and filed its
+        # runs under somebody else's, while telling the user it had failed.
+        if name in available_profiles(market):
+            st.error(f"Could not rename: a search named “{name}” already exists.")
+            return
         try:
             moved = history_mod.rename_profile_runs(
                 market.data_dir(), market.name, existing.name, name

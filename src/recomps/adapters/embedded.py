@@ -326,10 +326,11 @@ def extract_records(html: str, spec: EmbeddedSpec) -> ExtractedRecords:
                 row["lot_sqft"], row["lot_size_is_rounded"] = value
             else:
                 row[name] = value
-        if spec.url_base and row.get("source_url"):
-            path = str(row["source_url"])
-            if path.startswith("/"):
-                row["source_url"] = spec.url_base.rstrip("/") + path
+        if row.get("source_url"):
+            resolved, complaint = _resolve_source_url(str(row["source_url"]), spec)
+            row["source_url"] = resolved
+            if complaint:
+                result.problems.append(f"record {index}: {complaint}")
         if not row.get("address"):
             result.problems.append(f"record {index} has no address; skipped")
             continue
@@ -337,6 +338,50 @@ def extract_records(html: str, spec: EmbeddedSpec) -> ExtractedRecords:
 
     _check_count(result, payload, spec)
     return result
+
+
+def _resolve_source_url(raw: str, spec: EmbeddedSpec) -> tuple[str | None, str]:
+    """Turn a record's URL into one this tool is willing to fetch.
+
+    This value is chosen by the site being read, and whatever it says lands in
+    the comp's `sources` and is fetched next from the owner's machine. Left
+    unchecked it is a redirect the site controls: an absolute URL passed
+    straight through, so a compromised or hostile listing page could name
+
+        http://169.254.169.254/latest/meta-data/...
+
+    -- a cloud metadata endpoint -- or a service on localhost, and the response
+    would be cached to disk and placed inside a model prompt. `robots.txt`
+    offers no protection here, because a host that serves no robots.txt is
+    treated as unrestricted.
+
+    So a record may only point at the site it came from. A relative path is
+    joined to the source's own base; an absolute URL is accepted only when its
+    host matches that base; anything else is dropped and reported, because a
+    listing index naming a different host is a fact worth seeing rather than a
+    routine miss.
+    """
+    from urllib.parse import urlparse
+
+    raw = raw.strip()
+    if not raw:
+        return None, ""
+    if not spec.url_base:
+        # No base to judge against: only same-document relative paths are safe,
+        # and there is nothing to join them to.
+        return None, "" if raw.startswith("/") else f"no url_base to resolve {raw!r} against"
+    base = urlparse(spec.url_base)
+    if raw.startswith("/"):
+        return spec.url_base.rstrip("/") + raw, ""
+    target = urlparse(raw)
+    if target.scheme not in ("http", "https"):
+        return None, f"dropped a {target.scheme or 'schemeless'} URL: {raw!r}"
+    if target.hostname and base.hostname and target.hostname.lower() == base.hostname.lower():
+        return raw, ""
+    return None, (
+        f"dropped a URL pointing away from {base.hostname}: {raw!r}. A source may "
+        "only link to itself."
+    )
 
 
 def _check_count(result: ExtractedRecords, payload: Any, spec: EmbeddedSpec) -> None:

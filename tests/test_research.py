@@ -829,3 +829,64 @@ def test_well_attributed_listings_raise_nothing():
     listings = [ActiveListing(address=f"{i} Example St", agent="A") for i in range(10)]
     _report_active_attribution(diagnostics, listings)
     assert not diagnostics.not_found
+
+
+# ---------------------------------------------------------------------------
+# A source may only point at itself
+# ---------------------------------------------------------------------------
+#
+# A record's URL is chosen by the site being read, and whatever it says gets
+# fetched next from the owner's machine, cached to disk, and put in a model
+# prompt. Passed through unchecked it is a redirect the site controls.
+
+
+def _url_spec() -> EmbeddedSpec:
+    return EmbeddedSpec.from_config(
+        {
+            "script_id": "__NEXT_DATA__",
+            "records_path": "p",
+            "url_base": "https://listings.invalid",
+            "fields": {
+                "address": {"path": "a", "transform": "text"},
+                "source_url": {"path": "u", "transform": "text"},
+            },
+        }
+    )
+
+
+def _extract_url(raw: str):
+    html = (
+        '<html><script id="__NEXT_DATA__">'
+        + json.dumps({"p": [{"a": "1 Example St", "u": raw}]})
+        + "</script></html>"
+    )
+    found = extract_records(html, _url_spec())
+    return found.rows[0]["source_url"], found.problems
+
+
+@pytest.mark.parametrize(
+    "hostile",
+    [
+        "http://169.254.169.254/latest/meta-data/",  # cloud metadata
+        "http://localhost:8501/_stcore/health",      # a service on this machine
+        "http://127.0.0.1:22/",
+        "https://elsewhere.invalid/x",
+        "file:///etc/passwd",
+    ],
+)
+def test_a_record_cannot_send_the_fetcher_somewhere_else(hostile):
+    resolved, problems = _extract_url(hostile)
+    assert resolved is None, f"would have fetched {hostile}"
+    assert problems, "a source naming another host is worth reporting, not silent"
+
+
+def test_a_relative_path_still_resolves_against_its_own_site():
+    resolved, problems = _extract_url("/home/1-Example-St/99/")
+    assert resolved == "https://listings.invalid/home/1-Example-St/99/"
+    assert not problems
+
+
+def test_an_absolute_url_on_the_same_site_is_kept():
+    resolved, problems = _extract_url("https://listings.invalid/home/ok/")
+    assert resolved == "https://listings.invalid/home/ok/"
+    assert not problems

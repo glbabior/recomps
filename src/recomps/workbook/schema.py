@@ -124,13 +124,17 @@ def _metric_columns(profile: CompProfile) -> list[Column]:
         Column(
             "ppsf",
             "$ / sq ft",
-            # Guarded, because "not found" renders as an em dash and dividing by
+            # Guarded on BOTH sides. "Not found" renders as an em dash, and
+            # dividing by
             # it yields #VALUE! -- which then poisons every aggregate over this
             # column: the average, the median, the min, the max and the core
             # view all come back as errors from one sale with no published size.
             # A blank is the honest result for a rate that cannot be computed,
             # and the statistics skip it rather than break on it.
-            formula='=IF(ISNUMBER({metric}{row}),{price}{row}/{metric}{row},"")',
+            formula=(
+                '=IF(AND(ISNUMBER({price}{row}),ISNUMBER({metric}{row})),'
+                '{price}{row}/{metric}{row},"")'
+            ),
             number_format=FMT_MONEY_CENTS,
             width=12,
         ),
@@ -175,7 +179,7 @@ def sold_schema(profile: CompProfile) -> SheetSchema:
                 # would return #VALUE! into the average-ratio and share-at-ask
                 # cells on the Summary. No ask, no ratio -- not an error.
                 formula=(
-                    '=IF(ISNUMBER({final_list}{row}),'
+                    '=IF(AND(ISNUMBER({price}{row}),ISNUMBER({final_list}{row})),'
                     '{price}{row}/{final_list}{row},"")'
                 ),
                 number_format=FMT_PERCENT,

