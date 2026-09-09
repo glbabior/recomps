@@ -5,7 +5,7 @@ description = "Market-agnostic engine for researching real-estate comps, with an
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "Gabriel Babior" }]
+authors = [{ name = "Gregory Babior" }]
 keywords = ["agentic-ai", "claude", "real-estate", "web-research", "llm-orchestration"]
 classifiers = [
   "Programming Language :: Python :: 3.11",
