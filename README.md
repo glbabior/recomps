@@ -17,6 +17,10 @@ recomps run --market demoville --offline
 
 That command does everything a real run does — gathering sales, setting aside the ones that don't belong, the statistics, the valuation, the pricing strategies, sorting parcels by area of town, the agent analysis — against a made-up market that ships with the tool. It writes a five-sheet Excel workbook, a JSON snapshot, and a write-up of what it did. No API key. No network. No scraping.
 
+![The results screen: the market's own median beside four figures for the subject property](docs/screenshots/results.png)
+
+*Every screenshot here is Demoville, the synthetic market that ships with the tool — the same one `--offline` runs. The market's own median is stated separately from the four figures for your property, because they answer different questions.*
+
 ---
 
 ## The problem
@@ -25,11 +29,19 @@ In January 2026 the Eaton Fire burned through Altadena, California. What is left
 
 Pricing a burned lot is genuinely hard. There is no established price-per-square-foot for a vacant parcel in a neighborhood that was fully built out a year ago. The comparable sales are recent, thin, and scattered across aggregator sites that disagree with each other. And the usual shortcut — take the market's median $/sqft and multiply — is wrong in a specific, expensive way: **smaller parcels sell at a higher rate per square foot than larger ones**, so a market-wide figure systematically understates a small lot.
 
+![Sales split into equal-count size bands, the rate falling as the band widens](docs/screenshots/rate-by-size.png)
+
+*The premium is not assumed, it is reported. Bands hold equal numbers of sales rather than equal size ranges, so every row's median rests on a comparable sample — and the smallest band selling 29% above the largest is a figure a reader can check, not a correction applied out of sight.*
+
 This project began as a research process run by hand, three times, with an AI assistant. It worked. It also took hours each time and lived entirely in one person's head. REComps is that process turned into software.
 
 ## What it produces
 
 A run reports on screen. It gives the subject's value from five bases side by side rather than blended, three list-price strategies and a walk-away floor, a bracket ladder showing how far the estimate moves as "similar size" widens from tight to the whole market, a size/rate table splitting sales into equal-count bands so the size premium is read off a column rather than assumed, a by-area table for the four quadrants of the market with size reported beside every rate, the sold-to-ask distribution, a core view that recomputes the headline figures with the extremes set aside, and an agent table — the people who actually closed these sales, their volume, the median of their sales against ask, the rate they achieved, and the median parcel size they achieved it on, grouped into brokerage families, as a shortlist to interview rather than a ranking. Every figure has the comps behind it a click away.
+
+![The bracket ladder: the same sales read at widening size ranges, each with its own count and rate](docs/screenshots/lot-size-bands.png)
+
+*The estimate is one row of this table, marked. Widening "similar" from ±10% to the whole market moves it across a 6% spread — so the table reports the whole curve rather than the single point on it that a bandwidth choice happens to land on. The last row is every sale, which is the market average and a different claim.*
 
 Then you can take it with you. The same run exports a workbook of five sheets — **Summary**, **Pricing Guidance**, **Sold Comps**, **Active Listings**, **Agents** — and that is where it stops being a report and becomes a model. Everything in it is a live formula. The Summary's median $/sqft is `=MEDIAN('Sold Comps'!E2:E47)`, not a number that was true when the file was written. Delete a comp you don't believe, correct a lot size the aggregator rounded, type a different size for your own property into the yellow cell — and the valuation, the pricing strategies, and the walk-away floor all move. It is the version you can argue with, and hand to somebody who will.
 
@@ -265,6 +277,12 @@ Anything the run set aside is visible where the figures are. Parcels excluded by
 Sold comps and current listings get **separate tables**. An asking price is a claim and a sale is a fact, and one table with a status column invites reading the first as the second. Beside them sit rate by size band, rate by area, and the agents.
 
 The agent table is a shortlist to interview and reads like a ranking, so it carries what stops it being one. Sold-to-ask is shown as a signed distance from ask — the median of that agent's sales, not the mean — and next to it the **rate the agent actually achieved** — because beating a low ask is not the same as getting a good price — and next to *that* the average size it was achieved on, since a rate looks better on smaller parcels. Live listing counts sit beside closings: they answer different questions, and an agent working this market now with nothing closed here yet still appears. Shortlisted agents are tinted, and their sales carry the same tint in the sold and listing tables, so one person can be traced across all three by eye. Colour is never the only cue; the name is in every table regardless.
+
+![The agent table, four shortlisted agents tinted, with closings, distance from ask, rate achieved and average size](docs/screenshots/agents.png)
+
+![The comparable sales, each shortlisted agent's sales carrying that agent's tint](docs/screenshots/comps.png)
+
+*A tint identifies the same person in both tables. The last agent row shows what a missing figure looks like: an em dash, never a zero and never a blank — someone holding a live listing with nothing closed here yet has no ratio and no rate, and that is reported rather than filled in.*
 
 The interface offers no choice of data source, and that is the point. A market
 with live sources is researched; one without replays the recording it ships.
