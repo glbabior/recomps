@@ -1187,6 +1187,9 @@ def _size_bands(current: ui_state.Viewing) -> None:
 HIGHLIGHTS = ["#1F4E79", "#7B2D26", "#2D6A4F", "#5B3A82", "#8A5300", "#1F6F78"]
 HIGHLIGHT_TEXT = "#FFFFFF"
 
+#: What a missing figure looks like, matching the workbook.
+NOT_FOUND = "—"
+
 
 def _shortlist_colors(analysis: dict | None) -> dict[str, str]:
     """One colour per shortlisted agent, in the order the table lists them."""
@@ -1211,9 +1214,14 @@ def _styled(rows: list[dict], colors: dict[str, str], agent_column: str):
     frame = pd.DataFrame(rows)
     if not colors or agent_column not in frame.columns:
         return frame
-    return frame.style.apply(
+    styled = frame.style.apply(
         lambda row: [_tint(colors, row[agent_column])] * len(row), axis=1
     )
+    # A figure that does not exist renders as an em dash, the same as
+    # everywhere else here. An agent with a live listing and no closings has no
+    # ratio and no rate, and a blank left to the grid's own devices comes back
+    # as the word "None", which reads as data.
+    return styled.format(na_rep=NOT_FOUND)
 
 
 def _unticked(edited) -> set[str]:
