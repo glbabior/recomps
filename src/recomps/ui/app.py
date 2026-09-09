@@ -925,14 +925,24 @@ def _show_comparison(earlier, later) -> None:
         rows.append(
             {
                 "Figure": delta.label,
-                "Before": delta.before,
-                "After": delta.after,
-                "Change": delta.pct_change,
+                "Before": _figure(delta.before, "{:,.2f}"),
+                "After": _figure(delta.after, "{:,.2f}"),
+                # A fraction, so it is scaled here. A printf "%.1f%%" in the
+                # column config formats the raw 0.05 as "0.1%" -- a real change
+                # shown as a hundredth of itself, which is worse than no column.
+                "Change": _figure(
+                    None if delta.pct_change is None else delta.pct_change * 100.0,
+                    "{:+.1f}%",
+                ),
             }
         )
     st.dataframe(
         rows, hide_index=True, width="stretch",
-        column_config={"Change": st.column_config.NumberColumn(format="%.1f%%")},
+        column_config={
+            "Before": _figure_column(),
+            "After": _figure_column(),
+            "Change": _figure_column(),
+        },
     )
     if report.new_sales:
         st.caption("New sales: " + ", ".join(report.new_sales[:12]))
@@ -1153,20 +1163,20 @@ def _size_bands(current: ui_state.Viewing) -> None:
                 {
                     "Size band": r["label"] + ("  ← your property" if r["holds_subject"] else ""),
                     "Sold": r["count"],
-                    "Median $/sq ft": r["median_ppsf"],
-                    "Avg $/sq ft": r["avg_ppsf"],
-                    "Median size": r["median_size"],
-                    "Median price": r["median_price"],
+                    "Median $/sq ft": _figure(r["median_ppsf"], "${:,.2f}"),
+                    "Avg $/sq ft": _figure(r["avg_ppsf"], "${:,.2f}"),
+                    "Median size": _figure(r["median_size"], "{:,.0f}"),
+                    "Median price": _figure(r["median_price"], "${:,.0f}"),
                 }
                 for r in rows
             ],
             hide_index=True,
             width="stretch",
             column_config={
-                "Median $/sq ft": st.column_config.NumberColumn(format="$%.2f"),
-                "Avg $/sq ft": st.column_config.NumberColumn(format="$%.2f"),
-                "Median size": st.column_config.NumberColumn(format="%,d"),
-                "Median price": st.column_config.NumberColumn(format="$%,d"),
+                "Median $/sq ft": _figure_column(),
+                "Avg $/sq ft": _figure_column(),
+                "Median size": _figure_column(),
+                "Median price": _figure_column(),
             },
         )
         for note in notes:
@@ -1189,6 +1199,36 @@ HIGHLIGHT_TEXT = "#FFFFFF"
 
 #: What a missing figure looks like, matching the workbook.
 NOT_FOUND = "—"
+
+
+def _figure(value: float | int | None, pattern: str) -> str:
+    """A number formatted for display, or the em dash when there is none.
+
+    Streamlit renders a missing value in a `NumberColumn` as the literal word
+    "None" -- grey, right-aligned, and indistinguishable at a glance from a
+    value the search found. `Styler.format(na_rep=...)` does not fix it: the
+    styler's display strings reach the grid for cells that have a value, but a
+    null is sent as a null and the frontend prints its own word for it. Every
+    combination was tried against a real browser; only substituting before the
+    frame is built works.
+
+    So a column that can hold an absence is formatted here and rendered as
+    text. The cost is that such a column is left-aligned rather than right-,
+    which is why the columns that cannot go missing keep their `NumberColumn`.
+    That trade is deliberate: "not found" is a value this project promises to
+    show as a dash, and the run notes say in words that unattributed sales
+    "are shown as a dash".
+    """
+    return NOT_FOUND if value is None else pattern.format(value)
+
+
+def _figure_column(**kwargs):
+    """The column config for a column of `_figure` strings.
+
+    Text, so the em dash survives, but aligned right so a column of money
+    still reads as a column of money against the counts beside it.
+    """
+    return st.column_config.TextColumn(alignment="right", **kwargs)
 
 
 def _shortlist_colors(analysis: dict | None) -> dict[str, str]:
@@ -1214,14 +1254,12 @@ def _styled(rows: list[dict], colors: dict[str, str], agent_column: str):
     frame = pd.DataFrame(rows)
     if not colors or agent_column not in frame.columns:
         return frame
-    styled = frame.style.apply(
+    # Colour only. A missing figure is turned into an em dash by `_figure`
+    # before the frame is built, because a Styler's `na_rep` does not reach
+    # this grid -- see `_figure`.
+    return frame.style.apply(
         lambda row: [_tint(colors, row[agent_column])] * len(row), axis=1
     )
-    # A figure that does not exist renders as an em dash, the same as
-    # everywhere else here. An agent with a live listing and no closings has no
-    # ratio and no rate, and a blank left to the grid's own devices comes back
-    # as the word "None", which reads as data.
-    return styled.format(na_rep=NOT_FOUND)
 
 
 def _unticked(edited) -> set[str]:
@@ -1284,23 +1322,25 @@ def _ladder(current: ui_state.Viewing, profile: CompProfile | None = None) -> No
                         + ("   (too thin to lead on)" if r["is_thin"] else "")
                     ),
                     "Sold": r["count"],
-                    "Median $/sq ft": r["median_ppsf"],
-                    "Avg $/sq ft": r["avg_ppsf"],
-                    "Value at median": r["value_from_median"],
-                    "Value at average": r["value_from_avg"],
+                    "Median $/sq ft": _figure(r["median_ppsf"], "${:,.2f}"),
+                    "Avg $/sq ft": _figure(r["avg_ppsf"], "${:,.2f}"),
+                    "Value at median": _figure(r["value_from_median"], "${:,.0f}"),
+                    "Value at average": _figure(r["value_from_avg"], "${:,.0f}"),
                 }
                 for r in rows
             ],
             hide_index=True,
             width="stretch",
             column_config={
-                "Median $/sq ft": st.column_config.NumberColumn(format="$%.2f"),
-                "Avg $/sq ft": st.column_config.NumberColumn(format="$%.2f"),
-                "Value at median": st.column_config.NumberColumn(format="$%,d"),
-                "Value at average": st.column_config.NumberColumn(
-                    format="$%,d",
-                    help="The convention the headline estimate uses: the average "
+                "Median $/sq ft": _figure_column(),
+                "Avg $/sq ft": _figure_column(),
+                "Value at median": _figure_column(
+                    help="The convention the headline estimate uses: the middle "
                          "rate of the sales inside the range, times your size.",
+                ),
+                "Value at average": _figure_column(
+                    help="The same range read as a mean. Shown beside the median "
+                         "so a range whose two readings disagree is visible.",
                 ),
             },
         )
@@ -1325,27 +1365,26 @@ def _areas(current: ui_state.Viewing, market=None) -> None:
                 {
                     "Area": r["area"],
                     "Sold": r["sold_count"],
-                    "Median $/sq ft": r["sold_median_ppsf"],
-                    "Avg $/sq ft": r["sold_avg_ppsf"],
-                    "Avg size": r["sold_avg_size"],
-                    "Median price": r["sold_median_price"],
+                    "Median $/sq ft": _figure(r["sold_median_ppsf"], "${:,.2f}"),
+                    "Avg $/sq ft": _figure(r["sold_avg_ppsf"], "${:,.2f}"),
+                    "Avg size": _figure(r["sold_avg_size"], "{:,.0f}"),
+                    "Median price": _figure(r["sold_median_price"], "${:,.0f}"),
                     "Active": r["active_count"],
-                    "Active avg $/sq ft": r["active_avg_ppsf"],
+                    "Active avg $/sq ft": _figure(r["active_avg_ppsf"], "${:,.2f}"),
                 }
                 for r in rows
             ],
             hide_index=True,
             width="stretch",
             column_config={
-                "Median $/sq ft": st.column_config.NumberColumn(format="$%.2f"),
-                "Avg $/sq ft": st.column_config.NumberColumn(format="$%.2f"),
-                "Active avg $/sq ft": st.column_config.NumberColumn(format="$%.2f"),
-                "Avg size": st.column_config.NumberColumn(
-                    format="%,d",
+                "Median $/sq ft": _figure_column(),
+                "Avg $/sq ft": _figure_column(),
+                "Active avg $/sq ft": _figure_column(),
+                "Avg size": _figure_column(
                     help="Read the rate beside this. A quadrant of larger parcels "
                          "shows a lower $/sq ft without being cheaper land.",
                 ),
-                "Median price": st.column_config.NumberColumn(format="$%,d"),
+                "Median price": _figure_column(),
             },
         )
         for note in notes:
@@ -1380,15 +1419,16 @@ def _active_table(current: ui_state.Viewing) -> None:
     table = [
         {
             "Address": r["address"],
-            "Asking": r["list_price"],
-            "Lot sq ft": r["lot_sqft"],
-            "$/sq ft": (
+            "Asking": _figure(r["list_price"], "${:,.0f}"),
+            "Lot sq ft": _figure(r["lot_sqft"], "{:,.0f}"),
+            "$/sq ft": _figure(
                 r["list_price"] / r["lot_sqft"]
-                if r["list_price"] and r["lot_sqft"] else None
+                if r["list_price"] and r["lot_sqft"] else None,
+                "${:,.2f}",
             ),
-            "Brokerage": r["brokerage"] or "—",
-            "Agent": r["agent"] or "—",
-            "Area": r["area"] or "—",
+            "Brokerage": r["brokerage"] or NOT_FOUND,
+            "Agent": r["agent"] or NOT_FOUND,
+            "Area": r["area"] or NOT_FOUND,
         }
         for r in rows
     ]
@@ -1397,9 +1437,9 @@ def _active_table(current: ui_state.Viewing) -> None:
         hide_index=True,
         width="stretch",
         column_config={
-            "Asking": st.column_config.NumberColumn(format="$%,d"),
-            "Lot sq ft": st.column_config.NumberColumn(format="%,d"),
-            "$/sq ft": st.column_config.NumberColumn(format="$%.2f"),
+            "Asking": _figure_column(),
+            "Lot sq ft": _figure_column(),
+            "$/sq ft": _figure_column(),
         },
     )
     if sized < len(rows):
@@ -1488,11 +1528,14 @@ def _agents(current: ui_state.Viewing) -> None:
                 # makes the reader do the subtraction.
                 # The median, not the mean: with one to three sales an agent,
                 # a single bidding war drags an average a long way.
-                "vs asking": _ratio_percent(
-                    row.get("median_sold_to_ask", row.get("avg_sold_to_ask"))
+                "vs asking": _figure(
+                    _ratio_percent(
+                        row.get("median_sold_to_ask", row.get("avg_sold_to_ask"))
+                    ),
+                    "{:+.1f}%",
                 ),
-                "$/sq ft": row.get("avg_ppsf"),
-                "Avg size": row.get("avg_size"),
+                "$/sq ft": _figure(row.get("avg_ppsf"), "${:,.2f}"),
+                "Avg size": _figure(row.get("avg_size"), "{:,.0f}"),
                 "Live": row.get("active_listings") or 0,
                 "Pattern": row["flag"] or "",
                 "Both sides": "yes" if row["dual_agency"] else "",
@@ -1501,7 +1544,7 @@ def _agents(current: ui_state.Viewing) -> None:
         ]
         # A run archived before these figures existed carries no rate at all.
         # An empty column reads as broken; say what it is instead.
-        if not any(r["$/sq ft"] is not None for r in rows):
+        if all(r["$/sq ft"] == NOT_FOUND for r in rows):
             for row in rows:
                 row.pop("$/sq ft")
                 row.pop("Avg size")
@@ -1515,20 +1558,17 @@ def _agents(current: ui_state.Viewing) -> None:
             hide_index=True,
             width="stretch",
             column_config={
-                "vs asking": st.column_config.NumberColumn(
-                    format="%+.1f%%",
+                "vs asking": _figure_column(
                     help="The middle sale against its final asking price. A "
                          "median rather than a mean, because one bidding war "
                          "moves an average of two or three sales a long way.",
                 ),
-                "$/sq ft": st.column_config.NumberColumn(
-                    format="$%.2f",
+                "$/sq ft": _figure_column(
                     help="The rate this agent's sales actually achieved. Beating a low "
                          "ask is not the same as getting a good price — this is the "
                          "column that tells them apart.",
                 ),
-                "Avg size": st.column_config.NumberColumn(
-                    format="%,d",
+                "Avg size": _figure_column(
                     help="Read the rate beside it: an agent working smaller parcels "
                          "shows a higher $/sq ft without being a better agent.",
                 ),
@@ -1655,15 +1695,16 @@ def _comps_table(market, profile: CompProfile, current: ui_state.Viewing) -> Non
             "Include": row["address"] not in excluded,
             "Address": row["address"],
             "Sold": row["sold_date"],
-            "Price": row["sold_price"],
-            "Lot sq ft": row["lot_sqft"],
-            "$/sq ft": (
+            "Price": _figure(row["sold_price"], "${:,.0f}"),
+            "Lot sq ft": _figure(row["lot_sqft"], "{:,.0f}"),
+            "$/sq ft": _figure(
                 row["sold_price"] / row["lot_sqft"]
-                if row["sold_price"] and row["lot_sqft"] else None
+                if row["sold_price"] and row["lot_sqft"] else None,
+                "${:,.2f}",
             ),
-            "Brokerage": row["brokerage"] or "—",
-            "Agent": row["agent"] or "—",
-            "Area": row["area"] or "—",
+            "Brokerage": row["brokerage"] or NOT_FOUND,
+            "Agent": row["agent"] or NOT_FOUND,
+            "Area": row["area"] or NOT_FOUND,
         }
         for row in rows
     ]
@@ -1679,9 +1720,9 @@ def _comps_table(market, profile: CompProfile, current: ui_state.Viewing) -> Non
             "Include": st.column_config.CheckboxColumn(
                 "Use", help="Untick to leave this sale out of the figures."
             ),
-            "Price": st.column_config.NumberColumn(format="$%,d"),
-            "Lot sq ft": st.column_config.NumberColumn(format="%,d"),
-            "$/sq ft": st.column_config.NumberColumn(format="$%.2f"),
+            "Price": _figure_column(),
+            "Lot sq ft": _figure_column(),
+            "$/sq ft": _figure_column(),
         },
         key="comps_editor",
     )
